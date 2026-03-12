@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, UploadCloud } from "lucide-react";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import { supabase } from "@/lib/supabase";
 
 type FormData = {
@@ -13,6 +15,10 @@ type FormData = {
   reporterName: string;
   reporterTitle: string;
   confirmed: boolean;
+};
+
+type PdfData = FormData & {
+  photoUrl: string | null;
 };
 
 const initialForm: FormData = {
@@ -34,6 +40,7 @@ export default function Home() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoInputKey, setPhotoInputKey] = useState(0);
+  const [pdfData, setPdfData] = useState<PdfData | null>(null);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -108,6 +115,44 @@ export default function Home() {
     }
   };
 
+  const downloadPDF = async () => {
+    if (!pdfData) return;
+
+    const element = document.getElementById("pdf-template");
+    if (!element) {
+      alert("找不到 PDF 模板，請重新整理頁面後再試。");
+      return;
+    }
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      const yOffset = imgHeight > pageHeight ? 0 : (pageHeight - imgHeight) / 2;
+
+      pdf.addImage(imgData, "PNG", 0, yOffset, imgWidth, imgHeight, undefined, "FAST");
+
+      const club = pdfData.clubName || "未填社團";
+      const date = pdfData.date || "未填日期";
+      const fileName = `教學紀錄_${club}_${date}.pdf`;
+
+      pdf.save(fileName);
+    } catch (err) {
+      console.error("[TeachingRecord] PDF generate error", err);
+      alert("產生 PDF 時發生錯誤，請稍後再試。");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSuccessMessage("");
@@ -177,6 +222,10 @@ export default function Home() {
       }
 
       setSuccessMessage("提交成功！已完成教學紀錄填報。");
+      setPdfData({
+        ...form,
+        photoUrl,
+      });
       setForm(initialForm);
       setPhotoUrl(null);
       setPhotoInputKey((prev) => prev + 1);
@@ -225,9 +274,20 @@ export default function Home() {
         </section>
 
         {successMessage && (
-          <div className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-            <CheckCircle2 className="mt-0.5 h-4 w-4" />
-            <p>{successMessage}</p>
+          <div className="mb-4 flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="mt-0.5 h-4 w-4" />
+              <p>{successMessage}</p>
+            </div>
+            {pdfData && (
+              <button
+                type="button"
+                onClick={downloadPDF}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-sky-500 bg-white px-3 py-1.5 text-xs font-medium text-sky-600 shadow-sm transition hover:bg-sky-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-1"
+              >
+                <span>📥 下載本次紀錄 PDF</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -436,6 +496,107 @@ export default function Home() {
             </span>
           </button>
         </form>
+
+        {/* PDF 模板（隱藏但可被 html2canvas 擷取） */}
+        <div
+          id="pdf-template"
+          className="pointer-events-none fixed left-0 top-0 -z-50 m-0 box-border hidden w-[794px] bg-white p-8 text-[12px] leading-relaxed text-zinc-900 shadow-sm print:block"
+        >
+          <div className="mb-4 text-center">
+            <h1 className="text-xl font-bold tracking-wide">
+              弘光科技大學社團指導老師教學紀錄表
+            </h1>
+          </div>
+
+          <div className="mb-4 border border-zinc-800 text-[11px]">
+            <div className="grid grid-cols-4 border-b border-zinc-800">
+              <div className="col-span-1 border-r border-zinc-800 bg-zinc-100 px-2 py-1 font-semibold">
+                社團名稱
+              </div>
+              <div className="col-span-3 px-2 py-1">
+                {pdfData?.clubName || form.clubName || "　"}
+              </div>
+            </div>
+            <div className="grid grid-cols-4 border-b border-zinc-800">
+              <div className="col-span-1 border-r border-zinc-800 bg-zinc-100 px-2 py-1 font-semibold">
+                指導日期
+              </div>
+              <div className="col-span-3 px-2 py-1">
+                {pdfData?.date || form.date || "　"}
+              </div>
+            </div>
+            <div className="grid grid-cols-4 border-b border-zinc-800">
+              <div className="col-span-1 border-r border-zinc-800 bg-zinc-100 px-2 py-1 font-semibold">
+                課程主題
+              </div>
+              <div className="col-span-3 px-2 py-1">
+                {pdfData?.topic || form.topic || "　"}
+              </div>
+            </div>
+            <div className="grid grid-cols-4 border-b border-zinc-800">
+              <div className="col-span-1 border-r border-zinc-800 bg-zinc-100 px-2 py-1 font-semibold">
+                出席人數
+              </div>
+              <div className="col-span-3 px-2 py-1">
+                {pdfData?.attendees || form.attendees || "　"}
+              </div>
+            </div>
+            <div className="grid grid-cols-4">
+              <div className="col-span-1 border-r border-zinc-800 bg-zinc-100 px-2 py-1 font-semibold">
+                填報人姓名 / 職稱
+              </div>
+              <div className="col-span-3 px-2 py-1">
+                {(pdfData?.reporterName || form.reporterName || "　") +
+                  " / " +
+                  (pdfData?.reporterTitle || form.reporterTitle || "　")}
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="mb-1 border-b border-zinc-800 pb-1 text-[11px] font-semibold">
+              教學內容描述
+            </div>
+            <div className="min-h-[160px] border border-zinc-800 px-3 py-2 text-[11px] leading-relaxed">
+              {(pdfData?.content || form.content || "").split("\n").map((line, idx) => (
+                <p key={idx}>{line || "　"}</p>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="mb-1 border-b border-zinc-800 pb-1 text-[11px] font-semibold">
+              教學成果照片
+            </div>
+            <div className="flex min-h-[220px] items-center justify-center border border-zinc-800 bg-zinc-50">
+              {pdfData?.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={pdfData.photoUrl}
+                  alt="教學成果照片"
+                  className="max-h-[260px] max-w-[500px] object-contain"
+                />
+              ) : (
+                <span className="text-[11px] text-zinc-400">
+                  （本次未上傳教學成果照片）
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-8 text-[11px]">
+            <div>
+              <div className="mb-6 border-b border-dashed border-zinc-700 pb-8">
+                指導老師簽名：
+              </div>
+            </div>
+            <div>
+              <div className="mb-6 border-b border-dashed border-zinc-700 pb-8">
+                課外組審核：
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   );
