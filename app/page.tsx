@@ -163,9 +163,31 @@ export default function Home() {
       }
     }
 
+    // 暫時停用包含 lab() 顏色函式的樣式表，避免 html2canvas 解析失敗
+    const styleSheets = Array.from(document.styleSheets || []);
+    const disabledSheets: CSSStyleSheet[] = [];
+
+    for (const sheet of styleSheets) {
+      try {
+        const cssSheet = sheet as CSSStyleSheet;
+        const rules = cssSheet.cssRules;
+        for (let i = 0; i < rules.length; i++) {
+          const rule = rules[i];
+          if (rule.cssText.includes("lab(")) {
+            cssSheet.disabled = true;
+            disabledSheets.push(cssSheet);
+            break;
+          }
+        }
+      } catch {
+        // 可能是跨網域樣式表，忽略
+      }
+    }
+
     try {
       const canvas = await html2canvas(element, {
         scale: 2,
+        backgroundColor: "#ffffff",
       });
 
       const imgData = canvas.toDataURL("image/png");
@@ -188,6 +210,11 @@ export default function Home() {
     } catch (err) {
       console.error("[TeachingRecord] PDF generate error", err);
       alert("產生 PDF 時發生錯誤，請稍後再試。");
+    } finally {
+      // 還原被停用的樣式表
+      disabledSheets.forEach((sheet) => {
+        sheet.disabled = false;
+      });
     }
   };
 
@@ -538,41 +565,41 @@ export default function Home() {
         {/* PDF 模板（隱藏但可被 html2canvas 擷取） */}
         <div
           id="pdf-template"
-          className="pointer-events-none fixed left-0 top-0 -z-50 m-0 box-border hidden w-[794px] bg-white p-8 text-[12px] leading-relaxed text-zinc-900 shadow-sm print:block"
+          className="pointer-events-none fixed left-0 top-0 -z-50 m-0 box-border hidden w-[794px] bg-[#ffffff] p-8 text-[12px] leading-relaxed text-[#111827] print:block"
         >
           <div className="mb-4 text-center">
-            <h1 className="text-xl font-bold tracking-wide">
+            <h1 className="text-xl font-bold tracking-wide text-[#111827]">
               弘光科技大學社團指導老師教學紀錄表
             </h1>
           </div>
 
-          <div className="mb-4 border border-zinc-800 text-[11px]">
-            <div className="grid grid-cols-4 border-b border-zinc-800">
-              <div className="col-span-1 border-r border-zinc-800 bg-zinc-100 px-2 py-1 font-semibold">
+          <div className="mb-4 border border-[#111827] text-[11px]">
+            <div className="grid grid-cols-4 border-b border-[#111827]">
+              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
                 社團名稱
               </div>
               <div className="col-span-3 px-2 py-1">
                 {pdfData?.clubName || form.clubName || "　"}
               </div>
             </div>
-            <div className="grid grid-cols-4 border-b border-zinc-800">
-              <div className="col-span-1 border-r border-zinc-800 bg-zinc-100 px-2 py-1 font-semibold">
+            <div className="grid grid-cols-4 border-b border-[#111827]">
+              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
                 指導日期
               </div>
               <div className="col-span-3 px-2 py-1">
                 {pdfData?.date || form.date || "　"}
               </div>
             </div>
-            <div className="grid grid-cols-4 border-b border-zinc-800">
-              <div className="col-span-1 border-r border-zinc-800 bg-zinc-100 px-2 py-1 font-semibold">
+            <div className="grid grid-cols-4 border-b border-[#111827]">
+              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
                 課程主題
               </div>
               <div className="col-span-3 px-2 py-1">
                 {pdfData?.topic || form.topic || "　"}
               </div>
             </div>
-            <div className="grid grid-cols-4 border-b border-zinc-800">
-              <div className="col-span-1 border-r border-zinc-800 bg-zinc-100 px-2 py-1 font-semibold">
+            <div className="grid grid-cols-4 border-b border-[#111827]">
+              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
                 出席人數
               </div>
               <div className="col-span-3 px-2 py-1">
@@ -580,7 +607,7 @@ export default function Home() {
               </div>
             </div>
             <div className="grid grid-cols-4">
-              <div className="col-span-1 border-r border-zinc-800 bg-zinc-100 px-2 py-1 font-semibold">
+              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
                 填報人姓名 / 職稱
               </div>
               <div className="col-span-3 px-2 py-1">
@@ -592,10 +619,10 @@ export default function Home() {
           </div>
 
           <div className="mb-4">
-            <div className="mb-1 border-b border-zinc-800 pb-1 text-[11px] font-semibold">
+            <div className="mb-1 border-b border-[#111827] pb-1 text-[11px] font-semibold">
               教學內容描述
             </div>
-            <div className="min-h-[160px] border border-zinc-800 px-3 py-2 text-[11px] leading-relaxed">
+            <div className="min-h-[160px] border border-[#111827] px-3 py-2 text-[11px] leading-relaxed">
               {(pdfData?.content || form.content || "").split("\n").map((line, idx) => (
                 <p key={idx}>{line || "　"}</p>
               ))}
@@ -603,10 +630,10 @@ export default function Home() {
           </div>
 
           <div className="mb-4">
-            <div className="mb-1 border-b border-zinc-800 pb-1 text-[11px] font-semibold">
+            <div className="mb-1 border-b border-[#111827] pb-1 text-[11px] font-semibold">
               教學成果照片
             </div>
-            <div className="flex min-h-[220px] items-center justify-center border border-zinc-800 bg-zinc-50">
+            <div className="flex min-h-[220px] items-center justify-center border border-[#111827] bg-[#f9fafb]">
               {pdfData?.photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -616,7 +643,7 @@ export default function Home() {
                   className="max-h-[260px] max-w-[500px] object-contain"
                 />
               ) : (
-                <span className="text-[11px] text-zinc-400">
+                <span className="text-[11px] text-[#9ca3af]">
                   （本次未上傳教學成果照片）
                 </span>
               )}
@@ -625,12 +652,12 @@ export default function Home() {
 
           <div className="mt-6 grid grid-cols-2 gap-8 text-[11px]">
             <div>
-              <div className="mb-6 border-b border-dashed border-zinc-700 pb-8">
+              <div className="mb-6 border-b border-dashed border-[#374151] pb-8">
                 指導老師簽名：
               </div>
             </div>
             <div>
-              <div className="mb-6 border-b border-dashed border-zinc-700 pb-8">
+              <div className="mb-6 border-b border-dashed border-[#374151] pb-8">
                 課外組審核：
               </div>
             </div>
