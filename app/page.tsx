@@ -115,6 +115,30 @@ export default function Home() {
     }
   };
 
+  const toBase64 = async (url: string): Promise<string> => {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`圖片載入失敗 (${response.status})`);
+    }
+
+    const blob = await response.blob();
+
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+        } else {
+          reject(new Error("讀取圖片資料失敗"));
+        }
+      };
+      reader.onerror = () => {
+        reject(reader.error ?? new Error("讀取圖片資料失敗"));
+      };
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const downloadPDF = async () => {
     if (!pdfData) return;
 
@@ -124,10 +148,24 @@ export default function Home() {
       return;
     }
 
+    // 先將 Supabase 圖片抓回來轉成 base64，再塞回模板中的 <img>
+    if (pdfData.photoUrl) {
+      const imgEl = element.querySelector<HTMLImageElement>("[data-pdf-photo]");
+      if (imgEl) {
+        try {
+          const dataUrl = await toBase64(pdfData.photoUrl);
+          imgEl.src = dataUrl;
+        } catch (err) {
+          console.error("[TeachingRecord] 下載或轉換照片失敗", err);
+          // 若失敗就清空圖片，避免 html2canvas 報 CORS 錯誤，但仍繼續產生 PDF
+          imgEl.src = "";
+        }
+      }
+    }
+
     try {
       const canvas = await html2canvas(element, {
         scale: 2,
-        useCORS: true,
       });
 
       const imgData = canvas.toDataURL("image/png");
@@ -572,6 +610,7 @@ export default function Home() {
               {pdfData?.photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
+                  data-pdf-photo
                   src={pdfData.photoUrl}
                   alt="教學成果照片"
                   className="max-h-[260px] max-w-[500px] object-contain"
