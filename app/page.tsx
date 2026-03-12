@@ -140,81 +140,94 @@ export default function Home() {
   };
 
   const downloadPDF = async () => {
-    if (!pdfData) return;
+    try {
+      if (!pdfData) return;
 
-    const element = document.getElementById("pdf-template");
-    if (!element) {
-      alert("找不到 PDF 模板，請重新整理頁面後再試。");
-      return;
-    }
-
-    // 先將 Supabase 圖片抓回來轉成 base64，再塞回模板中的 <img>
-    if (pdfData.photoUrl) {
-      const imgEl = element.querySelector<HTMLImageElement>("[data-pdf-photo]");
-      if (imgEl) {
-        try {
-          const dataUrl = await toBase64(pdfData.photoUrl);
-          imgEl.src = dataUrl;
-        } catch (err) {
-          console.error("[TeachingRecord] 下載或轉換照片失敗", err);
-          // 若失敗就清空圖片，避免 html2canvas 報 CORS 錯誤，但仍繼續產生 PDF
-          imgEl.src = "";
-        }
+      const element = document.getElementById("pdf-template");
+      if (!element) {
+        alert("找不到 PDF 模板，請重新整理頁面後再試。");
+        return;
       }
-    }
 
-    // 暫時停用包含 lab() 顏色函式的樣式表，避免 html2canvas 解析失敗
-    const styleSheets = Array.from(document.styleSheets || []);
-    const disabledSheets: CSSStyleSheet[] = [];
-
-    for (const sheet of styleSheets) {
-      try {
-        const cssSheet = sheet as CSSStyleSheet;
-        const rules = cssSheet.cssRules;
-        for (let i = 0; i < rules.length; i++) {
-          const rule = rules[i];
-          if (rule.cssText.includes("lab(")) {
-            cssSheet.disabled = true;
-            disabledSheets.push(cssSheet);
-            break;
+      // 先將 Supabase 圖片抓回來轉成 base64，再塞回模板中的 <img>
+      if (pdfData.photoUrl) {
+        const imgEl = element.querySelector<HTMLImageElement>("[data-pdf-photo]");
+        if (imgEl) {
+          try {
+            const dataUrl = await toBase64(pdfData.photoUrl);
+            imgEl.src = dataUrl;
+          } catch (err) {
+            console.error("[TeachingRecord] 下載或轉換照片失敗", err);
+            // 若失敗就清空圖片，避免 html2canvas 報 CORS 錯誤，但仍繼續產生 PDF
+            imgEl.src = "";
           }
         }
-      } catch {
-        // 可能是跨網域樣式表，忽略
       }
-    }
 
-    try {
+      // 暫時停用包含 lab() 顏色函式的樣式表，避免 html2canvas 解析失敗
+      const styleSheets = Array.from(document.styleSheets || []);
+      const disabledSheets: CSSStyleSheet[] = [];
+
+      for (const sheet of styleSheets) {
+        try {
+          const cssSheet = sheet as CSSStyleSheet;
+          const rules = cssSheet.cssRules;
+          for (let i = 0; i < rules.length; i++) {
+            const rule = rules[i];
+            if (rule.cssText.includes("lab(")) {
+              cssSheet.disabled = true;
+              disabledSheets.push(cssSheet);
+              break;
+            }
+          }
+        } catch {
+          // 可能是跨網域樣式表，忽略
+        }
+      }
+
+      // 1. 強制確保模板在擷取時是可見的
+      const originalDisplay = element.style.display;
+      element.style.display = "block";
+
       const canvas = await html2canvas(element, {
         scale: 2,
+        useCORS: true,
+        logging: false,
         backgroundColor: "#ffffff",
       });
 
-      const imgData = canvas.toDataURL("image/png");
+      // 擷取完就還原顯示狀態
+      element.style.display = originalDisplay;
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.9);
       const pdf = new jsPDF("p", "mm", "a4");
 
+      // 2. A4 寬度 210mm，固定以寬度等比縮放
       const pageWidth = 210;
-      const pageHeight = 297;
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const ratio = pageWidth / canvas.width;
+      const pageHeight = canvas.height * ratio;
 
-      const yOffset = imgHeight > pageHeight ? 0 : (pageHeight - imgHeight) / 2;
+      // 3. 防呆：高度異常時給預設值
+      const safeHeight = Number.isFinite(pageHeight) && pageHeight > 0 ? pageHeight : 297;
 
-      pdf.addImage(imgData, "PNG", 0, yOffset, imgWidth, imgHeight, undefined, "FAST");
+      // 4. 固定從 (0,0) 放入圖片
+      pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, safeHeight);
 
-      const club = pdfData.clubName || "未填社團";
-      const date = pdfData.date || "未填日期";
-      const fileName = `教學紀錄_${club}_${date}.pdf`;
+      // 5. 檔名使用社團名稱（避免空白）
+      const clubName =
+        pdfData.clubName ||
+        (document.querySelector<HTMLInputElement>('input[name="clubName"]')?.value ??
+          "社團");
 
-      pdf.save(fileName);
-    } catch (err) {
-      console.error("[TeachingRecord] PDF generate error", err);
-      alert("產生 PDF 時發生錯誤，請稍後再試。");
-    } finally {
+      pdf.save(`教學紀錄_${clubName}.pdf`);
+
       // 還原被停用的樣式表
       disabledSheets.forEach((sheet) => {
         sheet.disabled = false;
       });
+    } catch (err) {
+      console.error("[TeachingRecord] PDF generate error", err);
+      alert("PDF 產生失敗，請確認 F12 Console 訊息");
     }
   };
 
