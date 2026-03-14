@@ -59,7 +59,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     document.title = "社團記錄管理後台";
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (authAttempted.current) return;
