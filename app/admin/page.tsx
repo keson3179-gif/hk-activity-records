@@ -176,9 +176,106 @@ export default function AdminPage() {
     try {
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidth = 210;
+      const totalPages = clubRecords.length + 1;
+
+      let categoryName = "";
+      for (const key of CATEGORY_KEYS) {
+        if (CLUB_CATEGORIES[key].clubs.includes(clubName)) {
+          categoryName = key;
+          break;
+        }
+      }
+
+      const stats = getClubStats(records, clubName);
+      const submitter = clubRecords[0]?.submitter_name || "—";
+      const totalHoursDisplay = stats.totalHours;
+      const statusText = stats.qualified ? "✅ 已達標" : "❌ 未達標";
+      const statusColor = stats.qualified ? "#059669" : "#d97706";
+
+      const tocRows = clubRecords
+        .map(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (r: any, i: number) =>
+            `<tr style="border-bottom:1px solid #e5e7eb;">
+              <td style="padding:6px 10px;text-align:center;color:#6b7280;">${i + 1}</td>
+              <td style="padding:6px 10px;">${r.course_date || "—"}</td>
+              <td style="padding:6px 10px;">${r.course_topic || "—"}</td>
+              <td style="padding:6px 10px;text-align:center;">${r.teaching_hours ?? 0}h</td>
+            </tr>`,
+        )
+        .join("");
+
+      const tocHtml = `
+        <div style="text-align:center;margin-bottom:32px;padding-top:24px;">
+          <div style="font-size:13px;color:#6b7280;margin-bottom:6px;">弘光科技大學 課外活動指導組</div>
+          <div style="font-size:22px;font-weight:700;color:#111827;letter-spacing:0.5px;">
+            114 學年度第 2 學期
+          </div>
+          <div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">
+            ${clubName} — 教學紀錄彙整總表
+          </div>
+        </div>
+
+        <table style="width:100%;border-collapse:collapse;margin-bottom:28px;font-size:12px;">
+          <tr style="border-bottom:1px solid #111827;">
+            <td style="padding:7px 10px;width:130px;background:#f3f4f6;font-weight:600;border-right:1px solid #d1d5db;">社團屬性</td>
+            <td style="padding:7px 10px;">${categoryName}</td>
+          </tr>
+          <tr style="border-bottom:1px solid #111827;">
+            <td style="padding:7px 10px;background:#f3f4f6;font-weight:600;border-right:1px solid #d1d5db;">社團名稱</td>
+            <td style="padding:7px 10px;">${clubName}</td>
+          </tr>
+          <tr style="border-bottom:1px solid #111827;">
+            <td style="padding:7px 10px;background:#f3f4f6;font-weight:600;border-right:1px solid #d1d5db;">指導老師（填報人）</td>
+            <td style="padding:7px 10px;">${submitter}</td>
+          </tr>
+          <tr style="border-bottom:1px solid #111827;">
+            <td style="padding:7px 10px;background:#f3f4f6;font-weight:600;border-right:1px solid #d1d5db;">總填報次數 / 總時數</td>
+            <td style="padding:7px 10px;">${stats.totalCount} 次 / ${totalHoursDisplay} 小時</td>
+          </tr>
+          <tr>
+            <td style="padding:7px 10px;background:#f3f4f6;font-weight:600;border-right:1px solid #d1d5db;">津貼核銷狀態</td>
+            <td style="padding:7px 10px;font-weight:600;color:${statusColor};">${statusText}</td>
+          </tr>
+        </table>
+
+        <div style="font-size:13px;font-weight:600;border-bottom:2px solid #111827;padding-bottom:4px;margin-bottom:10px;">
+          教學紀錄目錄
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <thead>
+            <tr style="background:#f3f4f6;border-bottom:2px solid #d1d5db;">
+              <th style="padding:6px 10px;text-align:center;width:50px;">序號</th>
+              <th style="padding:6px 10px;text-align:left;">填報日期</th>
+              <th style="padding:6px 10px;text-align:left;">課程主題</th>
+              <th style="padding:6px 10px;text-align:center;width:70px;">時數</th>
+            </tr>
+          </thead>
+          <tbody>${tocRows}</tbody>
+        </table>
+      `;
+
+      const tocDiv = document.createElement("div");
+      tocDiv.style.cssText =
+        "position:fixed;left:0;top:0;z-index:-9999;width:794px;padding:40px;background:#ffffff;font-family:system-ui,-apple-system,sans-serif;color:#111827;font-size:12px;line-height:1.6;box-sizing:border-box;";
+      tocDiv.innerHTML = tocHtml;
+      document.body.appendChild(tocDiv);
+
+      const tocCanvas = await html2canvas(tocDiv, {
+        scale: 2,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+      document.body.removeChild(tocDiv);
+
+      const tocImgData = tocCanvas.toDataURL("image/jpeg", 0.9);
+      const tocRatio = pageWidth / tocCanvas.width;
+      const tocPageH = tocCanvas.height * tocRatio;
+      const safeTocH = Number.isFinite(tocPageH) && tocPageH > 0 ? tocPageH : 297;
+      pdf.addImage(tocImgData, "JPEG", 0, 0, pageWidth, safeTocH);
 
       for (let i = 0; i < clubRecords.length; i++) {
-        if (i > 0) pdf.addPage();
+        pdf.addPage();
 
         const canvas = await renderRecordToCanvas(clubRecords[i]);
         const imgData = canvas.toDataURL("image/jpeg", 0.9);
@@ -187,6 +284,15 @@ export default function AdminPage() {
         const safeHeight = Number.isFinite(pageHeight) && pageHeight > 0 ? pageHeight : 297;
 
         pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, safeHeight);
+
+        pdf.setFontSize(9);
+        pdf.setTextColor(160, 160, 160);
+        pdf.text(
+          `第 ${i + 2} 頁，共 ${totalPages} 頁`,
+          pageWidth / 2,
+          290,
+          { align: "center" },
+        );
       }
 
       pdf.save(`114-2_${clubName}_教學紀錄全彙整.pdf`);
@@ -196,7 +302,7 @@ export default function AdminPage() {
     } finally {
       setMergingClub(null);
     }
-  }, [renderRecordToCanvas]);
+  }, [records, renderRecordToCanvas]);
 
   const currentCategory = CLUB_CATEGORIES[activeTab];
   const clubs = currentCategory.clubs;
@@ -420,7 +526,7 @@ export default function AdminPage() {
                             {mergingClub === clubName ? (
                               <>
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                PDF 合併中，請稍候…
+                                正在彙整目錄與分頁…
                               </>
                             ) : (
                               <>📥 合併下載此社團全學期紀錄 (PDF)</>
