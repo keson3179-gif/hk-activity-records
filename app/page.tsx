@@ -32,7 +32,7 @@ const initialForm: FormData = {
 export default function Home() {
   const [form, setForm] = useState<FormData>(initialForm);
   const [submitting, setSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
+  const [isSubmitted, setIsSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -84,7 +84,6 @@ export default function Home() {
     }
 
     setUploadingPhoto(true);
-    setSuccessMessage("");
     setErrorMessage("");
 
     try {
@@ -131,9 +130,18 @@ export default function Home() {
     }
   };
 
+  const handleReset = () => {
+    setIsSubmitted(false);
+    setForm(initialForm);
+    setSelectedCategory("");
+    setSelectedClub("");
+    setPhotoUrl(null);
+    setPhotoInputKey((prev) => prev + 1);
+    setErrorMessage("");
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setSuccessMessage("");
     setErrorMessage("");
 
     if (!form.confirmed) {
@@ -207,12 +215,7 @@ export default function Home() {
         return;
       }
 
-      setSuccessMessage("教學紀錄已成功送出！數據已進入課外組審核系統，無需繳交紙本。");
-      setForm(initialForm);
-      setSelectedCategory("");
-      setSelectedClub("");
-      setPhotoUrl(null);
-      setPhotoInputKey((prev) => prev + 1);
+      setIsSubmitted(true);
     } catch (err: unknown) {
       console.error("[TeachingRecord] Unexpected error during submit", err);
 
@@ -235,6 +238,31 @@ export default function Home() {
 
   const disableSubmit = submitting || uploadingPhoto || !form.confirmed;
 
+  if (isSubmitted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-100 px-4 py-10 font-sans text-zinc-900">
+        <div className="mx-auto w-full max-w-md rounded-2xl bg-white px-6 py-10 text-center shadow-sm sm:px-10">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+            <CheckCircle2 className="h-9 w-9 text-emerald-600" />
+          </div>
+          <h2 className="mb-2 text-xl font-semibold tracking-tight text-zinc-900">
+            教學紀錄已成功送出！
+          </h2>
+          <p className="mb-8 text-sm leading-relaxed text-zinc-500">
+            數據已進入課外組審核系統，無需繳交紙本。
+          </p>
+          <button
+            type="button"
+            onClick={handleReset}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
+          >
+            再填一筆
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-zinc-100 px-4 py-6 font-sans text-zinc-900">
       <main className="mx-auto w-full max-w-xl rounded-2xl bg-white p-5 shadow-sm sm:p-6">
@@ -253,13 +281,6 @@ export default function Home() {
             本教學紀錄為正式依據，請務必據實填寫。偽造紀錄者，視情節嚴重程度，最重將予以輔導停社處分。
           </p>
         </section>
-
-        {successMessage && (
-          <div className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>{successMessage}</p>
-          </div>
-        )}
 
         {errorMessage && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
