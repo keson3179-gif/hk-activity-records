@@ -425,44 +425,31 @@ export default function AdminPage() {
           <div className="mb-1 border-b border-[#111827] pb-1 text-[11px] font-semibold">
             教學內容描述
           </div>
-          <div className="min-h-[160px] border border-[#111827] px-3 py-2 text-[11px] leading-relaxed">
+          <div className="min-h-[240px] border border-[#111827] px-3 py-2 text-[11px] leading-relaxed">
             {(pdfRecord?.content || "").split("\n").map((line: string, idx: number) => (
               <p key={idx}>{line || "　"}</p>
             ))}
           </div>
         </div>
 
-        <div className="mb-4">
+        <div>
           <div className="mb-1 border-b border-[#111827] pb-1 text-[11px] font-semibold">
             教學成果照片
           </div>
-          <div className="flex min-h-[220px] items-center justify-center border border-[#111827] bg-[#f9fafb]">
+          <div className="flex min-h-[300px] items-center justify-center border border-[#111827] bg-[#f9fafb]">
             {pdfRecord?.photo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 data-pdf-photo
                 src={pdfRecord.photo_url}
                 alt="教學成果照片"
-                className="max-h-[260px] max-w-[500px] object-contain"
+                className="max-h-[380px] max-w-[600px] object-contain"
               />
             ) : (
               <span className="text-[11px] text-[#9ca3af]">
                 （本次未上傳教學成果照片）
               </span>
             )}
-          </div>
-        </div>
-
-        <div className="mt-6 grid grid-cols-2 gap-8 text-[11px]">
-          <div>
-            <div className="mb-6 border-b border-dashed border-[#374151] pb-8">
-              指導老師簽名：
-            </div>
-          </div>
-          <div>
-            <div className="mb-6 border-b border-dashed border-[#374151] pb-8">
-              課外組審核：
-            </div>
           </div>
         </div>
       </div>

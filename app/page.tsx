@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, UploadCloud } from "lucide-react";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import { supabase } from "@/lib/supabase";
 import { CLUB_CATEGORIES, CATEGORY_KEYS, type CategoryKey } from "@/lib/constants";
 
@@ -17,10 +15,6 @@ type FormData = {
   reporterName: string;
   reporterTitle: string;
   confirmed: boolean;
-};
-
-type PdfData = FormData & {
-  photoUrl: string | null;
 };
 
 const initialForm: FormData = {
@@ -43,7 +37,6 @@ export default function Home() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoInputKey, setPhotoInputKey] = useState(0);
-  const [pdfData, setPdfData] = useState<PdfData | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey | "">("");
   const [selectedClub, setSelectedClub] = useState("");
 
@@ -138,122 +131,6 @@ export default function Home() {
     }
   };
 
-  const toBase64 = async (url: string): Promise<string> => {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`圖片載入失敗 (${response.status})`);
-    }
-
-    const blob = await response.blob();
-
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          resolve(reader.result);
-        } else {
-          reject(new Error("讀取圖片資料失敗"));
-        }
-      };
-      reader.onerror = () => {
-        reject(reader.error ?? new Error("讀取圖片資料失敗"));
-      };
-      reader.readAsDataURL(blob);
-    });
-  };
-
-  const downloadPDF = async () => {
-    try {
-      if (!pdfData) return;
-
-      const element = document.getElementById("pdf-template");
-      if (!element) {
-        alert("找不到 PDF 模板，請重新整理頁面後再試。");
-        return;
-      }
-
-      // 先將 Supabase 圖片抓回來轉成 base64，再塞回模板中的 <img>
-      if (pdfData.photoUrl) {
-        const imgEl = element.querySelector<HTMLImageElement>("[data-pdf-photo]");
-        if (imgEl) {
-          try {
-            const dataUrl = await toBase64(pdfData.photoUrl);
-            imgEl.src = dataUrl;
-          } catch (err) {
-            console.error("[TeachingRecord] 下載或轉換照片失敗", err);
-            // 若失敗就清空圖片，避免 html2canvas 報 CORS 錯誤，但仍繼續產生 PDF
-            imgEl.src = "";
-          }
-        }
-      }
-
-      // 暫時停用包含 lab() 顏色函式的樣式表，避免 html2canvas 解析失敗
-      const styleSheets = Array.from(document.styleSheets || []);
-      const disabledSheets: CSSStyleSheet[] = [];
-
-      for (const sheet of styleSheets) {
-        try {
-          const cssSheet = sheet as CSSStyleSheet;
-          const rules = cssSheet.cssRules;
-          for (let i = 0; i < rules.length; i++) {
-            const rule = rules[i];
-            if (rule.cssText.includes("lab(")) {
-              cssSheet.disabled = true;
-              disabledSheets.push(cssSheet);
-              break;
-            }
-          }
-        } catch {
-          // 可能是跨網域樣式表，忽略
-        }
-      }
-
-      // 1. 強制確保模板在擷取時是可見的
-      const originalDisplay = element.style.display;
-      element.style.display = "block";
-
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-      });
-
-      // 擷取完就還原顯示狀態
-      element.style.display = originalDisplay;
-
-      const imgData = canvas.toDataURL("image/jpeg", 0.9);
-      const pdf = new jsPDF("p", "mm", "a4");
-
-      // 2. A4 寬度 210mm，固定以寬度等比縮放
-      const pageWidth = 210;
-      const ratio = pageWidth / canvas.width;
-      const pageHeight = canvas.height * ratio;
-
-      // 3. 防呆：高度異常時給預設值
-      const safeHeight = Number.isFinite(pageHeight) && pageHeight > 0 ? pageHeight : 297;
-
-      // 4. 固定從 (0,0) 放入圖片
-      pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, safeHeight);
-
-      // 5. 檔名使用社團名稱（避免空白）
-      const clubName =
-        pdfData.clubName ||
-        (document.querySelector<HTMLInputElement>('input[name="clubName"]')?.value ??
-          "社團");
-
-      pdf.save(`教學紀錄_${clubName}.pdf`);
-
-      // 還原被停用的樣式表
-      disabledSheets.forEach((sheet) => {
-        sheet.disabled = false;
-      });
-    } catch (err) {
-      console.error("[TeachingRecord] PDF generate error", err);
-      alert("PDF 產生失敗，請確認 F12 Console 訊息");
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSuccessMessage("");
@@ -330,11 +207,7 @@ export default function Home() {
         return;
       }
 
-      setSuccessMessage("提交成功！已完成教學紀錄填報。");
-      setPdfData({
-        ...form,
-        photoUrl,
-      });
+      setSuccessMessage("教學紀錄已成功送出！數據已進入課外組審核系統，無需繳交紙本。");
       setForm(initialForm);
       setSelectedCategory("");
       setSelectedClub("");
@@ -382,20 +255,9 @@ export default function Home() {
         </section>
 
         {successMessage && (
-          <div className="mb-4 flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-            <div className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4" />
-              <p>{successMessage}</p>
-            </div>
-            {pdfData && (
-              <button
-                type="button"
-                onClick={downloadPDF}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-sky-500 bg-white px-3 py-1.5 text-xs font-medium text-sky-600 shadow-sm transition hover:bg-sky-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-1"
-              >
-                <span>📥 下載本次紀錄 PDF</span>
-              </button>
-            )}
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>{successMessage}</p>
           </div>
         )}
 
@@ -646,115 +508,6 @@ export default function Home() {
           </button>
         </form>
 
-        {/* PDF 模板（隱藏但可被 html2canvas 擷取） */}
-        <div
-          id="pdf-template"
-          className="pointer-events-none fixed left-0 top-0 -z-50 m-0 box-border hidden w-[794px] bg-[#ffffff] p-8 text-[12px] leading-relaxed text-[#111827] print:block"
-        >
-          <div className="mb-4 text-center">
-            <h1 className="text-xl font-bold tracking-wide text-[#111827]">
-              弘光科技大學社團指導老師教學紀錄表
-            </h1>
-          </div>
-
-          <div className="mb-4 border border-[#111827] text-[11px]">
-            <div className="grid grid-cols-4 border-b border-[#111827]">
-              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-                社團名稱
-              </div>
-              <div className="col-span-3 px-2 py-1">
-                {pdfData?.clubName || form.clubName || "　"}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 border-b border-[#111827]">
-              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-                指導日期
-              </div>
-              <div className="col-span-3 px-2 py-1">
-                {pdfData?.date || form.date || "　"}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 border-b border-[#111827]">
-              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-                課程主題
-              </div>
-              <div className="col-span-3 px-2 py-1">
-                {pdfData?.topic || form.topic || "　"}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 border-b border-[#111827]">
-              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-                出席人數
-              </div>
-              <div className="col-span-3 px-2 py-1">
-                {pdfData?.attendees || form.attendees || "　"}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 border-b border-[#111827]">
-              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-                本次輔導時數
-              </div>
-              <div className="col-span-3 px-2 py-1">
-                {(pdfData?.teachingHours || form.teachingHours || "0") + " 小時"}
-              </div>
-            </div>
-            <div className="grid grid-cols-4">
-              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-                填報人姓名 / 職稱
-              </div>
-              <div className="col-span-3 px-2 py-1">
-                {(pdfData?.reporterName || form.reporterName || "　") +
-                  " / " +
-                  (pdfData?.reporterTitle || form.reporterTitle || "　")}
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <div className="mb-1 border-b border-[#111827] pb-1 text-[11px] font-semibold">
-              教學內容描述
-            </div>
-            <div className="min-h-[160px] border border-[#111827] px-3 py-2 text-[11px] leading-relaxed">
-              {(pdfData?.content || form.content || "").split("\n").map((line, idx) => (
-                <p key={idx}>{line || "　"}</p>
-              ))}
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <div className="mb-1 border-b border-[#111827] pb-1 text-[11px] font-semibold">
-              教學成果照片
-            </div>
-            <div className="flex min-h-[220px] items-center justify-center border border-[#111827] bg-[#f9fafb]">
-              {pdfData?.photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  data-pdf-photo
-                  src={pdfData.photoUrl}
-                  alt="教學成果照片"
-                  className="max-h-[260px] max-w-[500px] object-contain"
-                />
-              ) : (
-                <span className="text-[11px] text-[#9ca3af]">
-                  （本次未上傳教學成果照片）
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6 grid grid-cols-2 gap-8 text-[11px]">
-            <div>
-              <div className="mb-6 border-b border-dashed border-[#374151] pb-8">
-                指導老師簽名：
-              </div>
-            </div>
-            <div>
-              <div className="mb-6 border-b border-dashed border-[#374151] pb-8">
-                課外組審核：
-              </div>
-            </div>
-          </div>
-        </div>
       </main>
     </div>
   );
