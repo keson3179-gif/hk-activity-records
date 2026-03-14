@@ -52,6 +52,7 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<CategoryKey>(CATEGORY_KEYS[0]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [mergingClub, setMergingClub] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pdfRecord, setPdfRecord] = useState<any>(null);
   const [expandedClubs, setExpandedClubs] = useState<Set<string>>(new Set());
@@ -94,60 +95,62 @@ export default function AdminPage() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const downloadPDF = useCallback(async (record: any) => {
-    const id = record.id;
-    setDownloadingId(id);
+  const renderRecordToCanvas = useCallback(async (record: any) => {
     setPdfRecord(record);
+    await new Promise((r) => setTimeout(r, 120));
 
-    await new Promise((r) => setTimeout(r, 100));
+    const element = document.getElementById("admin-pdf-template");
+    if (!element) throw new Error("找不到 PDF 模板");
 
-    try {
-      const element = document.getElementById("admin-pdf-template");
-      if (!element) {
-        alert("找不到 PDF 模板");
-        return;
-      }
-
-      if (record.photo_url) {
-        const imgEl = element.querySelector<HTMLImageElement>("[data-pdf-photo]");
-        if (imgEl) {
-          try {
-            imgEl.src = await toBase64(record.photo_url);
-          } catch {
-            imgEl.src = "";
-          }
-        }
-      }
-
-      const styleSheets = Array.from(document.styleSheets || []);
-      const disabledSheets: CSSStyleSheet[] = [];
-      for (const sheet of styleSheets) {
+    if (record.photo_url) {
+      const imgEl = element.querySelector<HTMLImageElement>("[data-pdf-photo]");
+      if (imgEl) {
         try {
-          const css = sheet as CSSStyleSheet;
-          for (let i = 0; i < css.cssRules.length; i++) {
-            if (css.cssRules[i].cssText.includes("lab(")) {
-              css.disabled = true;
-              disabledSheets.push(css);
-              break;
-            }
-          }
+          imgEl.src = await toBase64(record.photo_url);
         } catch {
-          /* cross-origin */
+          imgEl.src = "";
         }
       }
+    }
 
-      const prev = element.style.display;
-      element.style.display = "block";
+    const styleSheets = Array.from(document.styleSheets || []);
+    const disabledSheets: CSSStyleSheet[] = [];
+    for (const sheet of styleSheets) {
+      try {
+        const css = sheet as CSSStyleSheet;
+        for (let i = 0; i < css.cssRules.length; i++) {
+          if (css.cssRules[i].cssText.includes("lab(")) {
+            css.disabled = true;
+            disabledSheets.push(css);
+            break;
+          }
+        }
+      } catch {
+        /* cross-origin */
+      }
+    }
 
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-      });
+    const prev = element.style.display;
+    element.style.display = "block";
 
-      element.style.display = prev;
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: "#ffffff",
+    });
 
+    element.style.display = prev;
+    disabledSheets.forEach((s) => { s.disabled = false; });
+
+    return canvas;
+  }, []);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const downloadPDF = useCallback(async (record: any) => {
+    setDownloadingId(record.id);
+    try {
+      const canvas = await renderRecordToCanvas(record);
       const imgData = canvas.toDataURL("image/jpeg", 0.9);
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidth = 210;
@@ -156,19 +159,44 @@ export default function AdminPage() {
       const safeHeight = Number.isFinite(pageHeight) && pageHeight > 0 ? pageHeight : 297;
 
       pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, safeHeight);
-
-      const club = record.club_name || "社團";
-      const date = record.course_date || "未知日期";
-      pdf.save(`教學紀錄_${club}_${date}.pdf`);
-
-      disabledSheets.forEach((s) => { s.disabled = false; });
+      pdf.save(`教學紀錄_${record.club_name || "社團"}_${record.course_date || "未知日期"}.pdf`);
     } catch (err) {
       console.error("[Admin] PDF generate error", err);
       alert("PDF 產生失敗，請確認 F12 Console 訊息");
     } finally {
       setDownloadingId(null);
     }
-  }, []);
+  }, [renderRecordToCanvas]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const downloadClubAllPDFs = useCallback(async (clubName: string, clubRecords: any[]) => {
+    if (clubRecords.length === 0) return;
+    setMergingClub(clubName);
+
+    try {
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = 210;
+
+      for (let i = 0; i < clubRecords.length; i++) {
+        if (i > 0) pdf.addPage();
+
+        const canvas = await renderRecordToCanvas(clubRecords[i]);
+        const imgData = canvas.toDataURL("image/jpeg", 0.9);
+        const ratio = pageWidth / canvas.width;
+        const pageHeight = canvas.height * ratio;
+        const safeHeight = Number.isFinite(pageHeight) && pageHeight > 0 ? pageHeight : 297;
+
+        pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, safeHeight);
+      }
+
+      pdf.save(`114-2_${clubName}_教學紀錄全彙整.pdf`);
+    } catch (err) {
+      console.error("[Admin] Merge PDF error", err);
+      alert("合併 PDF 產生失敗，請確認 F12 Console 訊息");
+    } finally {
+      setMergingClub(null);
+    }
+  }, [renderRecordToCanvas]);
 
   const currentCategory = CLUB_CATEGORIES[activeTab];
   const clubs = currentCategory.clubs;
@@ -374,6 +402,33 @@ export default function AdminPage() {
                         )}
                       </td>
                     </tr>
+
+                    {/* 合併下載按鈕列 */}
+                    {isExpanded && hasRecords && (
+                      <tr className="border-b border-gray-100 bg-indigo-50/50">
+                        <td className="px-3 py-2" />
+                        <td colSpan={4} className="px-4 py-2">
+                          <button
+                            type="button"
+                            disabled={mergingClub === clubName}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadClubAllPDFs(clubName, clubRecords);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-700 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-800 disabled:cursor-wait disabled:opacity-60"
+                          >
+                            {mergingClub === clubName ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                PDF 合併中，請稍候…
+                              </>
+                            ) : (
+                              <>📥 合併下載此社團全學期紀錄 (PDF)</>
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    )}
 
                     {/* 展開的子列 */}
                     {isExpanded &&
