@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -55,16 +55,29 @@ export default function AdminPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pdfRecord, setPdfRecord] = useState<any>(null);
 
+  const authAttempted = useRef(false);
+
   useEffect(() => {
-    // 進入後台頁面時，立刻修改瀏覽器分頁標題
     document.title = "社團記錄管理後台";
-    
-    // 原本的密碼驗證邏輯...
-    if (!isAuthenticated) {
-      const password = prompt('請輸入管理員密碼：');
-      // ... 後續邏輯
-    }
-  }, [isAuthenticated]);
+  }, []);
+
+  useEffect(() => {
+    if (authAttempted.current) return;
+    authAttempted.current = true;
+
+    const timer = setTimeout(() => {
+      const input = prompt("請輸入管理員密碼：");
+      if (input === ADMIN_PASSWORD) {
+        setIsAuthenticated(true);
+        fetchRecords();
+      } else {
+        alert("密碼錯誤，即將返回首頁");
+        window.location.href = "/";
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   async function fetchRecords() {
     const { data, error } = await supabase
