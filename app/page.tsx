@@ -387,9 +387,6 @@ export default function Home() {
           <h1 className="text-xl font-semibold tracking-tight">
             社團指導老師教學紀錄
           </h1>
-          <p className="text-xs text-zinc-500">
-            適合手機填寫的簡易紀錄表單
-          </p>
         </header>
 
         <section className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs leading-relaxed text-red-900">
