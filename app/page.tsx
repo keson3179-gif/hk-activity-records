@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Loader2, UploadCloud } from "lucide-react"
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { supabase } from "@/lib/supabase";
+import { CLUB_CATEGORIES, CATEGORY_KEYS, type CategoryKey } from "@/lib/constants";
 
 type FormData = {
   clubName: string;
@@ -41,6 +42,26 @@ export default function Home() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoInputKey, setPhotoInputKey] = useState(0);
   const [pdfData, setPdfData] = useState<PdfData | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<CategoryKey | "">("");
+  const [selectedClub, setSelectedClub] = useState("");
+
+  const clubOptions =
+    selectedCategory && selectedCategory in CLUB_CATEGORIES
+      ? CLUB_CATEGORIES[selectedCategory as CategoryKey].clubs
+      : [];
+
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value as CategoryKey | "";
+    setSelectedCategory(value);
+    setSelectedClub("");
+    setForm((prev) => ({ ...prev, clubName: "" }));
+  };
+
+  const handleClubChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    setSelectedClub(value);
+    setForm((prev) => ({ ...prev, clubName: value }));
+  };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -305,6 +326,8 @@ export default function Home() {
         photoUrl,
       });
       setForm(initialForm);
+      setSelectedCategory("");
+      setSelectedClub("");
       setPhotoUrl(null);
       setPhotoInputKey((prev) => prev + 1);
     } catch (err: unknown) {
@@ -376,21 +399,46 @@ export default function Home() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-sm">
-          <div className="space-y-1.5">
-            <label className="flex items-center justify-between text-xs font-medium text-zinc-700">
-              <span>
-                社團名稱 <span className="text-red-500">*</span>
-              </span>
-            </label>
-            <input
-              type="text"
-              name="clubName"
-              value={form.clubName}
-              onChange={handleChange}
-              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-100"
-              placeholder="例如：熱舞社、吉他社"
-              autoComplete="off"
-            />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="flex items-center justify-between text-xs font-medium text-zinc-700">
+                <span>
+                  社團屬性 <span className="text-red-500">*</span>
+                </span>
+              </label>
+              <select
+                value={selectedCategory}
+                onChange={handleCategoryChange}
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-100"
+              >
+                <option value="">請選擇社團屬性...</option>
+                {CATEGORY_KEYS.map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="flex items-center justify-between text-xs font-medium text-zinc-700">
+                <span>
+                  社團名稱 <span className="text-red-500">*</span>
+                </span>
+              </label>
+              <select
+                value={selectedClub}
+                onChange={handleClubChange}
+                disabled={!selectedCategory}
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">請選擇社團...</option>
+                {clubOptions.map((club) => (
+                  <option key={club} value={club}>
+                    {club}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
