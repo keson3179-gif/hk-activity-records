@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
-import { Loader2 } from "lucide-react";
+import { Fragment, useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { ChevronRight, Loader2 } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
@@ -54,6 +54,7 @@ export default function AdminPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pdfRecord, setPdfRecord] = useState<any>(null);
+  const [expandedClubs, setExpandedClubs] = useState<Set<string>>(new Set());
 
   const authAttempted = useRef(false);
 
@@ -180,10 +181,25 @@ export default function AdminPage() {
   const progressPercent =
     totalClubCount > 0 ? Math.round((qualifiedCount / totalClubCount) * 100) : 0;
 
-  const filteredRecords = useMemo(
-    () => records.filter((r) => clubs.includes(r.club_name)),
-    [records, clubs],
-  );
+  const clubRecordsMap = useMemo(() => {
+    const map: Record<string, typeof records> = {};
+    for (const club of clubs) {
+      map[club] = records.filter((r) => r.club_name === club);
+    }
+    return map;
+  }, [records, clubs]);
+
+  const toggleClub = useCallback((clubName: string) => {
+    setExpandedClubs((prev) => {
+      const next = new Set(prev);
+      if (next.has(clubName)) {
+        next.delete(clubName);
+      } else {
+        next.add(clubName);
+      }
+      return next;
+    });
+  }, []);
 
   const exportExcel = useCallback(() => {
     const rows: Record<string, string | number>[] = [];
@@ -285,121 +301,123 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* ── 社團津貼核銷摘要 ── */}
-        <div className="mb-6 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
+        {/* ── 社團摺疊表格 (Accordion) ── */}
+        <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
+          <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
-              <tr>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <tr className="border-b border-gray-200">
+                <th className="w-8 px-3 py-3" />
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                   社團名稱
                 </th>
-                <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  總填報次數
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  累計次數
                 </th>
-                <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  累計輔導時數
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  累計時數
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  津貼核銷狀態
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  達標狀態
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {clubs.map((clubName) => {
                 const stats = getClubStats(records, clubName);
-                return (
-                  <tr
-                    key={clubName}
-                    className={stats.qualified ? "bg-white" : "bg-red-50/60"}
-                  >
-                    <td className="px-5 py-3 font-medium text-gray-900">{clubName}</td>
-                    <td className="px-5 py-3 text-center tabular-nums text-gray-700">{stats.totalCount}</td>
-                    <td className="px-5 py-3 text-center tabular-nums text-gray-700">{stats.totalHours}h</td>
-                    <td className="px-5 py-3">
-                      {stats.qualified ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
-                          ✅ 已達標
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
-                          ⚠️ 未達標 (目前: {stats.totalCount}次 / {stats.totalHours}h)
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                const clubRecords = clubRecordsMap[clubName] || [];
+                const isExpanded = expandedClubs.has(clubName);
+                const hasRecords = clubRecords.length > 0;
 
-        {/* ── 個別填報紀錄 ── */}
-        <h2 className="mb-3 text-lg font-semibold tracking-tight">
-          填報紀錄明細
-        </h2>
-        <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  社團名稱
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  日期
-                </th>
-                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sm:table-cell">
-                  課程主題
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  時數
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  操作
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredRecords.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-xs text-gray-400">
-                    此屬性尚無填報紀錄
-                  </td>
-                </tr>
-              )}
-              {filteredRecords.map((record) => {
-                const isLoading = downloadingId === record.id;
                 return (
-                  <tr key={record.id} className="bg-white hover:bg-gray-50/60">
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      {record.club_name}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-gray-600">
-                      {record.course_date}
-                    </td>
-                    <td className="hidden px-4 py-3 text-gray-600 sm:table-cell">
-                      {record.course_topic || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-center tabular-nums text-gray-700">
-                      {record.teaching_hours ?? 0}h
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        type="button"
-                        disabled={isLoading}
-                        onClick={() => downloadPDF(record)}
-                        className="inline-flex items-center gap-1 rounded-full border border-sky-500 bg-white px-3 py-1 text-xs font-medium text-sky-600 shadow-sm transition hover:bg-sky-500 hover:text-white disabled:cursor-wait disabled:opacity-60"
-                      >
-                        {isLoading ? (
-                          <>
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            產生中…
-                          </>
+                  <Fragment key={clubName}>
+                    {/* 母列 */}
+                    <tr
+                      onClick={() => hasRecords && toggleClub(clubName)}
+                      className={`border-b border-gray-100 transition ${
+                        hasRecords ? "cursor-pointer hover:bg-gray-50" : ""
+                      } ${stats.qualified ? "bg-white" : "bg-red-50/40"}`}
+                    >
+                      <td className="px-3 py-3 text-center text-gray-400">
+                        {hasRecords ? (
+                          <ChevronRight
+                            className={`inline-block h-4 w-4 transition-transform duration-200 ${
+                              isExpanded ? "rotate-90" : ""
+                            }`}
+                          />
                         ) : (
-                          "📥 下載 PDF"
+                          <span className="inline-block h-4 w-4" />
                         )}
-                      </button>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        {clubName}
+                        {!hasRecords && (
+                          <span className="ml-2 text-[11px] font-normal text-gray-400">
+                            尚無紀錄
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center tabular-nums text-gray-700">
+                        {stats.totalCount}
+                      </td>
+                      <td className="px-4 py-3 text-center tabular-nums text-gray-700">
+                        {stats.totalHours}h
+                      </td>
+                      <td className="px-4 py-3">
+                        {stats.qualified ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                            ✅ 已達標
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                            ⚠️ 未達標
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* 展開的子列 */}
+                    {isExpanded &&
+                      clubRecords.map((record) => {
+                        const isLoading = downloadingId === record.id;
+                        return (
+                          <tr
+                            key={record.id}
+                            className="border-b border-gray-50 bg-gray-50/70"
+                          >
+                            <td className="px-3 py-2" />
+                            <td className="px-4 py-2 text-gray-600">
+                              {record.course_topic || "—"}
+                            </td>
+                            <td className="px-4 py-2 text-center tabular-nums text-gray-500">
+                              {record.course_date}
+                            </td>
+                            <td className="px-4 py-2 text-center tabular-nums text-gray-500">
+                              {record.teaching_hours ?? 0}h
+                            </td>
+                            <td className="px-4 py-2">
+                              <button
+                                type="button"
+                                disabled={isLoading}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  downloadPDF(record);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-full border border-sky-500 bg-white px-3 py-1 text-xs font-medium text-sky-600 shadow-sm transition hover:bg-sky-500 hover:text-white disabled:cursor-wait disabled:opacity-60"
+                              >
+                                {isLoading ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    產生中…
+                                  </>
+                                ) : (
+                                  "📥 下載 PDF"
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </Fragment>
                 );
               })}
             </tbody>
