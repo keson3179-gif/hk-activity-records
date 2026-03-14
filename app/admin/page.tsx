@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { Loader2 } from "lucide-react";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import { supabase } from "@/lib/supabase";
 import {
   CLUB_CATEGORIES,
@@ -10,6 +13,7 @@ import {
 
 const HOURS_THRESHOLD = 8;
 const COUNT_THRESHOLD = 4;
+const ADMIN_PASSWORD = "15001500";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getClubStats(records: any[], clubName: string) {
@@ -25,13 +29,30 @@ function getClubStats(records: any[], clubName: string) {
   return { totalCount, totalHours, qualified };
 }
 
-const ADMIN_PASSWORD = "15001500";
+async function toBase64(url: string): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`圖片載入失敗 (${response.status})`);
+  const blob = await response.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      typeof reader.result === "string"
+        ? resolve(reader.result)
+        : reject(new Error("讀取圖片資料失敗"));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("讀取圖片資料失敗"));
+    reader.readAsDataURL(blob);
+  });
+}
 
 export default function AdminPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [records, setRecords] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<CategoryKey>(CATEGORY_KEYS[0]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [pdfRecord, setPdfRecord] = useState<any>(null);
 
   useEffect(() => {
     const input = prompt("請輸入管理員密碼：");
@@ -57,17 +78,98 @@ export default function AdminPage() {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const downloadPDF = useCallback(async (record: any) => {
+    const id = record.id;
+    setDownloadingId(id);
+    setPdfRecord(record);
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    try {
+      const element = document.getElementById("admin-pdf-template");
+      if (!element) {
+        alert("找不到 PDF 模板");
+        return;
+      }
+
+      if (record.photo_url) {
+        const imgEl = element.querySelector<HTMLImageElement>("[data-pdf-photo]");
+        if (imgEl) {
+          try {
+            imgEl.src = await toBase64(record.photo_url);
+          } catch {
+            imgEl.src = "";
+          }
+        }
+      }
+
+      const styleSheets = Array.from(document.styleSheets || []);
+      const disabledSheets: CSSStyleSheet[] = [];
+      for (const sheet of styleSheets) {
+        try {
+          const css = sheet as CSSStyleSheet;
+          for (let i = 0; i < css.cssRules.length; i++) {
+            if (css.cssRules[i].cssText.includes("lab(")) {
+              css.disabled = true;
+              disabledSheets.push(css);
+              break;
+            }
+          }
+        } catch {
+          /* cross-origin */
+        }
+      }
+
+      const prev = element.style.display;
+      element.style.display = "block";
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+
+      element.style.display = prev;
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.9);
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = 210;
+      const ratio = pageWidth / canvas.width;
+      const pageHeight = canvas.height * ratio;
+      const safeHeight = Number.isFinite(pageHeight) && pageHeight > 0 ? pageHeight : 297;
+
+      pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, safeHeight);
+
+      const club = record.club_name || "社團";
+      const date = record.course_date || "未知日期";
+      pdf.save(`教學紀錄_${club}_${date}.pdf`);
+
+      disabledSheets.forEach((s) => { s.disabled = false; });
+    } catch (err) {
+      console.error("[Admin] PDF generate error", err);
+      alert("PDF 產生失敗，請確認 F12 Console 訊息");
+    } finally {
+      setDownloadingId(null);
+    }
+  }, []);
+
   const currentCategory = CLUB_CATEGORIES[activeTab];
   const clubs = currentCategory.clubs;
 
   const qualifiedCount = useMemo(
-    () =>
-      clubs.filter((c) => getClubStats(records, c).qualified).length,
+    () => clubs.filter((c) => getClubStats(records, c).qualified).length,
     [clubs, records],
   );
-  const totalCount = clubs.length;
+  const totalClubCount = clubs.length;
   const progressPercent =
-    totalCount > 0 ? Math.round((qualifiedCount / totalCount) * 100) : 0;
+    totalClubCount > 0 ? Math.round((qualifiedCount / totalClubCount) * 100) : 0;
+
+  const filteredRecords = useMemo(
+    () => records.filter((r) => clubs.includes(r.club_name)),
+    [records, clubs],
+  );
 
   if (!isAuthenticated) {
     return (
@@ -117,7 +219,7 @@ export default function AdminPage() {
               {activeTab} 津貼達標進度
             </span>
             <span className="tabular-nums text-gray-500">
-              {qualifiedCount} / {totalCount} 已達標
+              {qualifiedCount} / {totalClubCount} 已達標
             </span>
           </div>
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-200">
@@ -128,8 +230,8 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* ── 社團津貼核銷狀態表 ── */}
-        <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
+        {/* ── 社團津貼核銷摘要 ── */}
+        <div className="mb-6 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
@@ -150,21 +252,14 @@ export default function AdminPage() {
             <tbody className="divide-y divide-gray-100">
               {clubs.map((clubName) => {
                 const stats = getClubStats(records, clubName);
-
                 return (
                   <tr
                     key={clubName}
                     className={stats.qualified ? "bg-white" : "bg-red-50/60"}
                   >
-                    <td className="px-5 py-3 font-medium text-gray-900">
-                      {clubName}
-                    </td>
-                    <td className="px-5 py-3 text-center tabular-nums text-gray-700">
-                      {stats.totalCount}
-                    </td>
-                    <td className="px-5 py-3 text-center tabular-nums text-gray-700">
-                      {stats.totalHours}h
-                    </td>
+                    <td className="px-5 py-3 font-medium text-gray-900">{clubName}</td>
+                    <td className="px-5 py-3 text-center tabular-nums text-gray-700">{stats.totalCount}</td>
+                    <td className="px-5 py-3 text-center tabular-nums text-gray-700">{stats.totalHours}h</td>
                     <td className="px-5 py-3">
                       {stats.qualified ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
@@ -183,12 +278,201 @@ export default function AdminPage() {
           </table>
         </div>
 
+        {/* ── 個別填報紀錄 ── */}
+        <h2 className="mb-3 text-lg font-semibold tracking-tight">
+          填報紀錄明細
+        </h2>
+        <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  社團名稱
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  日期
+                </th>
+                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sm:table-cell">
+                  課程主題
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  時數
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  操作
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredRecords.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-xs text-gray-400">
+                    此屬性尚無填報紀錄
+                  </td>
+                </tr>
+              )}
+              {filteredRecords.map((record) => {
+                const isLoading = downloadingId === record.id;
+                return (
+                  <tr key={record.id} className="bg-white hover:bg-gray-50/60">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      {record.club_name}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-gray-600">
+                      {record.course_date}
+                    </td>
+                    <td className="hidden px-4 py-3 text-gray-600 sm:table-cell">
+                      {record.course_topic || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-center tabular-nums text-gray-700">
+                      {record.teaching_hours ?? 0}h
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        type="button"
+                        disabled={isLoading}
+                        onClick={() => downloadPDF(record)}
+                        className="inline-flex items-center gap-1 rounded-full border border-sky-500 bg-white px-3 py-1 text-xs font-medium text-sky-600 shadow-sm transition hover:bg-sky-500 hover:text-white disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            產生中…
+                          </>
+                        ) : (
+                          "📥 下載 PDF"
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
         <a
           href="/"
           className="mt-6 inline-block text-sm text-blue-600 hover:underline"
         >
           ← 回到填報頁面
         </a>
+      </div>
+
+      {/* ── 隱藏 PDF 模板（html2canvas 擷取用） ── */}
+      <div
+        id="admin-pdf-template"
+        className="pointer-events-none fixed left-0 top-0 -z-50 m-0 box-border hidden w-[794px] bg-[#ffffff] p-8 text-[12px] leading-relaxed text-[#111827] print:block"
+      >
+        <div className="mb-4 text-center">
+          <h1 className="text-xl font-bold tracking-wide text-[#111827]">
+            弘光科技大學社團指導老師教學紀錄表
+          </h1>
+        </div>
+
+        <div className="mb-4 border border-[#111827] text-[11px]">
+          <div className="grid grid-cols-4 border-b border-[#111827]">
+            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
+              社團名稱
+            </div>
+            <div className="col-span-3 px-2 py-1">
+              {pdfRecord?.club_name || "　"}
+            </div>
+          </div>
+          <div className="grid grid-cols-4 border-b border-[#111827]">
+            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
+              指導日期
+            </div>
+            <div className="col-span-3 px-2 py-1">
+              {pdfRecord?.course_date || "　"}
+            </div>
+          </div>
+          <div className="grid grid-cols-4 border-b border-[#111827]">
+            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
+              輔導時段
+            </div>
+            <div className="col-span-3 px-2 py-1">
+              {(pdfRecord?.start_time || "　") + " ~ " + (pdfRecord?.end_time || "　")}
+            </div>
+          </div>
+          <div className="grid grid-cols-4 border-b border-[#111827]">
+            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
+              課程主題
+            </div>
+            <div className="col-span-3 px-2 py-1">
+              {pdfRecord?.course_topic || "　"}
+            </div>
+          </div>
+          <div className="grid grid-cols-4 border-b border-[#111827]">
+            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
+              出席人數
+            </div>
+            <div className="col-span-3 px-2 py-1">
+              {pdfRecord?.attendance_count ?? "　"}
+            </div>
+          </div>
+          <div className="grid grid-cols-4 border-b border-[#111827]">
+            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
+              本次輔導時數
+            </div>
+            <div className="col-span-3 px-2 py-1">
+              {(pdfRecord?.teaching_hours ?? 0) + " 小時"}
+            </div>
+          </div>
+          <div className="grid grid-cols-4">
+            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
+              填報人姓名 / 職稱
+            </div>
+            <div className="col-span-3 px-2 py-1">
+              {(pdfRecord?.submitter_name || "　") + " / " + (pdfRecord?.submitter_role || "　")}
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <div className="mb-1 border-b border-[#111827] pb-1 text-[11px] font-semibold">
+            教學內容描述
+          </div>
+          <div className="min-h-[160px] border border-[#111827] px-3 py-2 text-[11px] leading-relaxed">
+            {(pdfRecord?.content || "").split("\n").map((line: string, idx: number) => (
+              <p key={idx}>{line || "　"}</p>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <div className="mb-1 border-b border-[#111827] pb-1 text-[11px] font-semibold">
+            教學成果照片
+          </div>
+          <div className="flex min-h-[220px] items-center justify-center border border-[#111827] bg-[#f9fafb]">
+            {pdfRecord?.photo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                data-pdf-photo
+                src={pdfRecord.photo_url}
+                alt="教學成果照片"
+                className="max-h-[260px] max-w-[500px] object-contain"
+              />
+            ) : (
+              <span className="text-[11px] text-[#9ca3af]">
+                （本次未上傳教學成果照片）
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-8 text-[11px]">
+          <div>
+            <div className="mb-6 border-b border-dashed border-[#374151] pb-8">
+              指導老師簽名：
+            </div>
+          </div>
+          <div>
+            <div className="mb-6 border-b border-dashed border-[#374151] pb-8">
+              課外組審核：
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
