@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 import {
   CLUB_CATEGORIES,
@@ -171,6 +172,38 @@ export default function AdminPage() {
     [records, clubs],
   );
 
+  const exportExcel = useCallback(() => {
+    const rows: Record<string, string | number>[] = [];
+
+    for (const catKey of CATEGORY_KEYS) {
+      const cat = CLUB_CATEGORIES[catKey];
+      for (const club of cat.clubs) {
+        const { totalCount, totalHours, qualified } = getClubStats(records, club);
+        rows.push({
+          屬性: catKey,
+          社團名稱: club,
+          總填報次數: totalCount,
+          累計輔導時數: totalHours,
+          津貼核銷狀態: qualified ? "✅已達標" : "❌未達標",
+        });
+      }
+    }
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    ws["!cols"] = [
+      { wch: 18 },
+      { wch: 24 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 16 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "核銷總表");
+    XLSX.writeFile(wb, "弘光科大114-2社團指導紀錄核銷表.xlsx");
+  }, [records]);
+
   if (!isAuthenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 font-sans text-gray-400">
@@ -182,13 +215,22 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-6 font-sans text-gray-900 sm:px-8">
       <div className="mx-auto max-w-5xl">
-        <header className="mb-6">
-          <h1 className="text-2xl font-bold tracking-tight">
-            弘光社團紀錄 — 管理後台
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            依社團屬性追蹤津貼核銷達標狀態（達標條件：輔導時數 ≥ {HOURS_THRESHOLD}h 或 填報次數 ≥ {COUNT_THRESHOLD} 次）
-          </p>
+        <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              弘光社團紀錄 — 管理後台
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">
+              依社團屬性追蹤津貼核銷達標狀態（達標條件：輔導時數 ≥ {HOURS_THRESHOLD}h 或 填報次數 ≥ {COUNT_THRESHOLD} 次）
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={exportExcel}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:bg-emerald-800"
+          >
+            📊 匯出 114-2 核銷總表
+          </button>
         </header>
 
         {/* ── 屬性切換標籤 ── */}
