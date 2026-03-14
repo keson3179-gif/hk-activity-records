@@ -25,13 +25,23 @@ function getClubStats(records: any[], clubName: string) {
   return { totalCount, totalHours, qualified };
 }
 
+const ADMIN_PASSWORD = "15001500";
+
 export default function AdminPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [records, setRecords] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<CategoryKey>(CATEGORY_KEYS[0]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    fetchRecords();
+    const input = prompt("請輸入管理員密碼：");
+    if (input === ADMIN_PASSWORD) {
+      setIsAuthenticated(true);
+      fetchRecords();
+    } else {
+      alert("密碼錯誤，即將返回首頁");
+      window.location.href = "/";
+    }
   }, []);
 
   async function fetchRecords() {
@@ -58,6 +68,14 @@ export default function AdminPage() {
   const totalCount = clubs.length;
   const progressPercent =
     totalCount > 0 ? Math.round((qualifiedCount / totalCount) * 100) : 0;
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 font-sans text-gray-400">
+        <p className="text-sm">驗證中…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-6 font-sans text-gray-900 sm:px-8">
