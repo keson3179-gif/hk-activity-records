@@ -389,14 +389,6 @@ export default function AdminPage() {
           </div>
           <div className="grid grid-cols-4 border-b border-[#111827]">
             <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-              輔導時段
-            </div>
-            <div className="col-span-3 px-2 py-1">
-              {(pdfRecord?.start_time || "　") + " ~ " + (pdfRecord?.end_time || "　")}
-            </div>
-          </div>
-          <div className="grid grid-cols-4 border-b border-[#111827]">
-            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
               課程主題
             </div>
             <div className="col-span-3 px-2 py-1">

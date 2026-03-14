@@ -10,8 +10,6 @@ import { CLUB_CATEGORIES, CATEGORY_KEYS, type CategoryKey } from "@/lib/constant
 type FormData = {
   clubName: string;
   date: string;
-  startTime: string;
-  endTime: string;
   topic: string;
   content: string;
   attendees: string;
@@ -28,8 +26,6 @@ type PdfData = FormData & {
 const initialForm: FormData = {
   clubName: "",
   date: "",
-  startTime: "",
-  endTime: "",
   topic: "",
   content: "",
   attendees: "",
@@ -273,16 +269,6 @@ export default function Home() {
       return;
     }
 
-    if (!form.startTime || !form.endTime) {
-      setErrorMessage("請填寫『開始時間』與『結束時間』。");
-      return;
-    }
-
-    if (form.startTime >= form.endTime) {
-      setErrorMessage("『結束時間』必須晚於『開始時間』。");
-      return;
-    }
-
     if (!form.teachingHours || Number(form.teachingHours) <= 0) {
       setErrorMessage("請填寫『本次輔導時數』，且須大於 0。");
       return;
@@ -308,8 +294,6 @@ export default function Home() {
       console.log("準備送出的資料：", {
         club_name: form.clubName,
         course_date: form.date,
-        start_time: form.startTime,
-        end_time: form.endTime,
         course_topic: form.topic,
         content: form.content,
         attendance_count,
@@ -323,8 +307,6 @@ export default function Home() {
       const { error } = await supabase.from("teaching_records").insert({
         club_name: form.clubName,
         course_date: form.date,
-        start_time: form.startTime,
-        end_time: form.endTime,
         course_topic: form.topic,
         content: form.content,
         attendance_count,
@@ -479,37 +461,6 @@ export default function Home() {
               onChange={handleChange}
               className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-100"
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="flex items-center justify-between text-xs font-medium text-zinc-700">
-                <span>
-                  開始時間 <span className="text-red-500">*</span>
-                </span>
-              </label>
-              <input
-                type="time"
-                name="startTime"
-                value={form.startTime}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-100"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="flex items-center justify-between text-xs font-medium text-zinc-700">
-                <span>
-                  結束時間 <span className="text-red-500">*</span>
-                </span>
-              </label>
-              <input
-                type="time"
-                name="endTime"
-                value={form.endTime}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-100"
-              />
-            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -721,16 +672,6 @@ export default function Home() {
               </div>
               <div className="col-span-3 px-2 py-1">
                 {pdfData?.date || form.date || "　"}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 border-b border-[#111827]">
-              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-                輔導時段
-              </div>
-              <div className="col-span-3 px-2 py-1">
-                {(pdfData?.startTime || form.startTime || "　") +
-                  " ~ " +
-                  (pdfData?.endTime || form.endTime || "　")}
               </div>
             </div>
             <div className="grid grid-cols-4 border-b border-[#111827]">
