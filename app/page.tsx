@@ -13,6 +13,7 @@ type FormData = {
   topic: string;
   content: string;
   attendees: string;
+  teachingHours: string;
   reporterName: string;
   reporterTitle: string;
   confirmed: boolean;
@@ -28,6 +29,7 @@ const initialForm: FormData = {
   topic: "",
   content: "",
   attendees: "",
+  teachingHours: "",
   reporterName: "",
   reporterTitle: "",
   confirmed: false,
@@ -267,6 +269,11 @@ export default function Home() {
       return;
     }
 
+    if (!form.teachingHours || Number(form.teachingHours) <= 0) {
+      setErrorMessage("請填寫『本次輔導時數』，且須大於 0。");
+      return;
+    }
+
     if (!form.reporterName) {
       setErrorMessage("請填寫『填報人姓名』欄位，此為必填。");
       return;
@@ -282,6 +289,7 @@ export default function Home() {
       const attendance_count = form.attendees
         ? Number(form.attendees)
         : null;
+      const teaching_hours = Number(form.teachingHours) || 0;
 
       console.log("準備送出的資料：", {
         club_name: form.clubName,
@@ -289,6 +297,7 @@ export default function Home() {
         course_topic: form.topic,
         content: form.content,
         attendance_count,
+        teaching_hours,
         submitter_name: form.reporterName,
         submitter_role: form.reporterTitle,
         integrity_check: form.confirmed,
@@ -301,6 +310,7 @@ export default function Home() {
         course_topic: form.topic,
         content: form.content,
         attendance_count,
+        teaching_hours,
         submitter_name: form.reporterName,
         submitter_role: form.reporterTitle,
         integrity_check: form.confirmed,
@@ -508,6 +518,24 @@ export default function Home() {
                 placeholder="例如：25"
               />
             </div>
+            <div className="space-y-1.5">
+              <label className="flex items-center justify-between text-xs font-medium text-zinc-700">
+                <span>
+                  本次輔導時數 (小時) <span className="text-red-500">*</span>
+                </span>
+              </label>
+              <input
+                type="number"
+                min={0.5}
+                step={0.5}
+                inputMode="decimal"
+                name="teachingHours"
+                value={form.teachingHours}
+                onChange={handleChange}
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-100"
+                placeholder="例如：2"
+              />
+            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -665,6 +693,14 @@ export default function Home() {
               </div>
               <div className="col-span-3 px-2 py-1">
                 {pdfData?.attendees || form.attendees || "　"}
+              </div>
+            </div>
+            <div className="grid grid-cols-4 border-b border-[#111827]">
+              <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
+                本次輔導時數
+              </div>
+              <div className="col-span-3 px-2 py-1">
+                {(pdfData?.teachingHours || form.teachingHours || "0") + " 小時"}
               </div>
             </div>
             <div className="grid grid-cols-4">

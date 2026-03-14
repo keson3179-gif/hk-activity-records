@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   CLUB_CATEGORIES,
@@ -8,9 +8,21 @@ import {
   type CategoryKey,
 } from "@/lib/constants";
 
+const HOURS_THRESHOLD = 8;
+const COUNT_THRESHOLD = 4;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function findRecord(records: any[], clubName: string) {
-  return records.find((r) => r.club_name === clubName);
+function getClubStats(records: any[], clubName: string) {
+  const matched = records.filter((r) => r.club_name === clubName);
+  const totalCount = matched.length;
+  const totalHours = matched.reduce(
+    (sum, r) => sum + (Number(r.teaching_hours) || 0),
+    0,
+  );
+  const qualified =
+    totalHours >= HOURS_THRESHOLD || totalCount >= COUNT_THRESHOLD;
+
+  return { totalCount, totalHours, qualified };
 }
 
 export default function AdminPage() {
@@ -37,19 +49,25 @@ export default function AdminPage() {
 
   const currentCategory = CLUB_CATEGORIES[activeTab];
   const clubs = currentCategory.clubs;
-  const submittedCount = clubs.filter((c) => findRecord(records, c)).length;
+
+  const qualifiedCount = useMemo(
+    () =>
+      clubs.filter((c) => getClubStats(records, c).qualified).length,
+    [clubs, records],
+  );
   const totalCount = clubs.length;
-  const progressPercent = totalCount > 0 ? Math.round((submittedCount / totalCount) * 100) : 0;
+  const progressPercent =
+    totalCount > 0 ? Math.round((qualifiedCount / totalCount) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-6 font-sans text-gray-900 sm:px-8">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-5xl">
         <header className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight">
             弘光社團紀錄 — 管理後台
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            依社團屬性追蹤各社教學紀錄繳交狀態
+            依社團屬性追蹤津貼核銷達標狀態（達標條件：輔導時數 ≥ {HOURS_THRESHOLD}h 或 填報次數 ≥ {COUNT_THRESHOLD} 次）
           </p>
         </header>
 
@@ -78,10 +96,10 @@ export default function AdminPage() {
         <div className="mb-5 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
           <div className="mb-2 flex items-baseline justify-between text-sm">
             <span className="font-medium text-gray-700">
-              {activeTab}繳交進度
+              {activeTab} 津貼達標進度
             </span>
             <span className="tabular-nums text-gray-500">
-              {submittedCount} / {totalCount}
+              {qualifiedCount} / {totalCount} 已達標
             </span>
           </div>
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-200">
@@ -92,7 +110,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* ── 社團繳交狀態表 ── */}
+        {/* ── 社團津貼核銷狀態表 ── */}
         <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
@@ -100,46 +118,45 @@ export default function AdminPage() {
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                   社團名稱
                 </th>
+                <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  總填報次數
+                </th>
+                <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  累計輔導時數
+                </th>
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  繳交狀態
-                </th>
-                <th className="hidden px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sm:table-cell">
-                  填寫日期
-                </th>
-                <th className="hidden px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 md:table-cell">
-                  課程主題
+                  津貼核銷狀態
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {clubs.map((clubName) => {
-                const record = findRecord(records, clubName);
-                const submitted = !!record;
+                const stats = getClubStats(records, clubName);
 
                 return (
                   <tr
                     key={clubName}
-                    className={submitted ? "bg-white" : "bg-red-50/60"}
+                    className={stats.qualified ? "bg-white" : "bg-red-50/60"}
                   >
                     <td className="px-5 py-3 font-medium text-gray-900">
                       {clubName}
                     </td>
+                    <td className="px-5 py-3 text-center tabular-nums text-gray-700">
+                      {stats.totalCount}
+                    </td>
+                    <td className="px-5 py-3 text-center tabular-nums text-gray-700">
+                      {stats.totalHours}h
+                    </td>
                     <td className="px-5 py-3">
-                      {submitted ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
-                          ✅ 已填寫
+                      {stats.qualified ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                          ✅ 已達標
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-200">
-                          ❌ 未填寫
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                          ⚠️ 未達標 (目前: {stats.totalCount}次 / {stats.totalHours}h)
                         </span>
                       )}
-                    </td>
-                    <td className="hidden px-5 py-3 text-gray-500 sm:table-cell">
-                      {record?.course_date || "—"}
-                    </td>
-                    <td className="hidden px-5 py-3 text-gray-500 md:table-cell">
-                      {record?.course_topic || "—"}
                     </td>
                   </tr>
                 );
