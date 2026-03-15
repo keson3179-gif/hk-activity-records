@@ -15,6 +15,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "弘光科技大學 | 社團指導老師教學紀錄系統",
   description: "課外活動指導組 - 指導老師輔導時數與紀錄管理平台",
+  openGraph: {
+    title: "弘光科技大學 | 社團指導老師教學紀錄系統",
+    description: "課外活動指導組 - 指導老師輔導時數與紀錄管理平台",
+    url: "https://hk-activity-records.vercel.app/",
+    siteName: "弘光科大社團紀錄系統",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
