@@ -131,17 +131,12 @@ export default function AdminPage() {
       }
     }
 
-    const prev = element.style.display;
-    element.style.display = "block";
-
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
       logging: false,
       backgroundColor: "#ffffff",
     });
-
-    element.style.display = prev;
     disabledSheets.forEach((s) => { s.disabled = false; });
 
     return canvas;
@@ -174,6 +169,9 @@ export default function AdminPage() {
     if (clubRecords.length === 0) return;
     setMergingClub(clubName);
     setIsMergingPDF(true);
+
+    // 讓瀏覽器先有時間把 Loading 遮罩畫出來，再進入重度運算區段
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     try {
       const pdf = new jsPDF("p", "mm", "a4");
@@ -624,7 +622,7 @@ export default function AdminPage() {
       {/* ── 隱藏 PDF 模板（html2canvas 擷取用） ── */}
       <div
         id="admin-pdf-template"
-        className="pointer-events-none fixed left-0 top-0 -z-50 m-0 box-border hidden w-[794px] bg-[#ffffff] p-8 text-[12px] leading-relaxed text-[#111827] print:block"
+        className="pointer-events-none fixed left-[-10000px] top-[200vh] z-[-50] m-0 box-border w-[794px] bg-[#ffffff] p-8 text-[12px] leading-relaxed text-[#111827]"
       >
         <div className="mb-4 text-center">
           <h1 className="text-xl font-bold tracking-wide text-[#111827]">
