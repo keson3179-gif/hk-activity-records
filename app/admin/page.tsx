@@ -285,6 +285,12 @@ export default function AdminPage() {
 
         pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, safeHeight);
 
+        // 使用支援中文的字體來渲染頁碼，避免「第 / 頁 / 共」出現亂碼
+        try {
+          pdf.setFont("NotoSansTC" as unknown as string);
+        } catch {
+          // 若該字體尚未註冊，jsPDF 會自動 fallback，仍可正常顯示數字部分
+        }
         pdf.setFontSize(9);
         pdf.setTextColor(160, 160, 160);
         pdf.text(
