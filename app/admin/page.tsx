@@ -53,6 +53,7 @@ export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [mergingClub, setMergingClub] = useState<string | null>(null);
+  const [isMergingPDF, setIsMergingPDF] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pdfRecord, setPdfRecord] = useState<any>(null);
   const [expandedClubs, setExpandedClubs] = useState<Set<string>>(new Set());
@@ -172,6 +173,7 @@ export default function AdminPage() {
   const downloadClubAllPDFs = useCallback(async (clubName: string, clubRecords: any[]) => {
     if (clubRecords.length === 0) return;
     setMergingClub(clubName);
+    setIsMergingPDF(true);
 
     try {
       const pdf = new jsPDF("p", "mm", "a4");
@@ -257,7 +259,7 @@ export default function AdminPage() {
 
       const tocDiv = document.createElement("div");
       tocDiv.style.cssText =
-        "position:fixed;left:0;top:0;z-index:-9999;width:794px;padding:40px;background:#ffffff;font-family:system-ui,-apple-system,sans-serif;color:#111827;font-size:12px;line-height:1.6;box-sizing:border-box;";
+        "position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;z-index:-9999;width:794px;padding:40px;background:#ffffff;font-family:system-ui,-apple-system,sans-serif;color:#111827;font-size:12px;line-height:1.6;box-sizing:border-box;";
       tocDiv.innerHTML = tocHtml;
       document.body.appendChild(tocDiv);
 
@@ -307,6 +309,7 @@ export default function AdminPage() {
       alert("合併 PDF 產生失敗，請確認 F12 Console 訊息");
     } finally {
       setMergingClub(null);
+      setIsMergingPDF(false);
     }
   }, [records, renderRecordToCanvas]);
 
@@ -382,7 +385,25 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-6 font-sans text-gray-900 sm:px-8">
+    <div className="relative min-h-screen bg-gray-50 px-4 py-6 font-sans text-gray-900 sm:px-8">
+      {isMergingPDF && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-2xl bg-white px-6 py-6 text-center shadow-xl">
+            <div className="mb-3 flex justify-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50">
+                <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+              </div>
+            </div>
+            <p className="mb-1 text-sm font-semibold text-gray-900">
+              📄 正在為您彙整全學期紀錄...
+            </p>
+            <p className="text-xs text-gray-500">
+              系統正在生成高畫質 PDF，請勿關閉網頁。
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-5xl">
         <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -396,7 +417,8 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={exportExcel}
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:bg-emerald-800"
+            disabled={isMergingPDF}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             📊 匯出 114-2 核銷總表
           </button>
@@ -522,7 +544,7 @@ export default function AdminPage() {
                         <td colSpan={4} className="px-4 py-2">
                           <button
                             type="button"
-                            disabled={mergingClub === clubName}
+                            disabled={isMergingPDF || mergingClub === clubName}
                             onClick={(e) => {
                               e.stopPropagation();
                               downloadClubAllPDFs(clubName, clubRecords);
@@ -564,7 +586,7 @@ export default function AdminPage() {
                             <td className="px-4 py-2">
                               <button
                                 type="button"
-                                disabled={isLoading}
+                                disabled={isMergingPDF || isLoading}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   downloadPDF(record);
