@@ -136,6 +136,10 @@ export default function AdminPage() {
       useCORS: true,
       logging: false,
       backgroundColor: "#ffffff",
+      scrollX: 0,
+      scrollY: -window.scrollY,
+      windowWidth: document.documentElement.offsetWidth,
+      windowHeight: document.documentElement.offsetHeight,
     });
     disabledSheets.forEach((s) => { s.disabled = false; });
 
@@ -265,6 +269,10 @@ export default function AdminPage() {
         scale: 2,
         logging: false,
         backgroundColor: "#ffffff",
+        scrollX: 0,
+        scrollY: -window.scrollY,
+        windowWidth: document.documentElement.offsetWidth,
+        windowHeight: document.documentElement.offsetHeight,
       });
       document.body.removeChild(tocDiv);
 
@@ -622,7 +630,7 @@ export default function AdminPage() {
       {/* ── 隱藏 PDF 模板（html2canvas 擷取用） ── */}
       <div
         id="admin-pdf-template"
-        className="pointer-events-none fixed left-[-10000px] top-[200vh] z-[-50] m-0 box-border w-[794px] bg-[#ffffff] p-8 text-[12px] leading-relaxed text-[#111827]"
+        className="pointer-events-none fixed left-[-200vw] top-0 z-[-50] m-0 box-border w-screen overflow-hidden bg-[#ffffff] p-0 text-[12px] leading-relaxed text-[#111827]"
       >
         <div className="mb-4 text-center">
           <h1 className="text-xl font-bold tracking-wide text-[#111827]">
