@@ -46,6 +46,25 @@ async function toBase64(url: string): Promise<string> {
   });
 }
 
+async function waitImagesLoaded(root: HTMLElement): Promise<void> {
+  const images = Array.from(root.querySelectorAll("img"));
+  if (images.length === 0) return;
+
+  await Promise.all(
+    images.map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          if (img.complete) {
+            resolve();
+          } else {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          }
+        }),
+    ),
+  );
+}
+
 export default function AdminPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [records, setRecords] = useState<any[]>([]);
@@ -177,6 +196,11 @@ export default function AdminPage() {
     // 讓瀏覽器先有時間把 Loading 遮罩畫出來，再進入重度運算區段
     await new Promise((resolve) => setTimeout(resolve, 100));
 
+    const printContainer = document.createElement("div");
+    printContainer.style.cssText =
+      "position:fixed;top:0;left:-9999px;width:800px;z-index:-9999;opacity:0;pointer-events:none;overflow:hidden;background:#ffffff;font-family:system-ui,-apple-system,sans-serif;color:#111827;font-size:12px;line-height:1.6;box-sizing:border-box;";
+    document.body.appendChild(printContainer);
+
     try {
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidth = 210;
@@ -259,11 +283,14 @@ export default function AdminPage() {
         </table>
       `;
 
+      // 首頁：寫入獨立的隱藏容器
+      printContainer.innerHTML = "";
       const tocDiv = document.createElement("div");
-      tocDiv.style.cssText =
-        "position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;z-index:-9999;width:794px;padding:40px;background:#ffffff;font-family:system-ui,-apple-system,sans-serif;color:#111827;font-size:12px;line-height:1.6;box-sizing:border-box;";
+      tocDiv.style.cssText = "width:800px;padding:40px;box-sizing:border-box;background:#ffffff;";
       tocDiv.innerHTML = tocHtml;
-      document.body.appendChild(tocDiv);
+      printContainer.appendChild(tocDiv);
+
+      await waitImagesLoaded(printContainer);
 
       const tocCanvas = await html2canvas(tocDiv, {
         scale: 2,
@@ -274,7 +301,6 @@ export default function AdminPage() {
         windowWidth: document.documentElement.offsetWidth,
         windowHeight: document.documentElement.offsetHeight,
       });
-      document.body.removeChild(tocDiv);
 
       const tocImgData = tocCanvas.toDataURL("image/jpeg", 0.9);
       const tocRatio = pageWidth / tocCanvas.width;
@@ -282,10 +308,88 @@ export default function AdminPage() {
       const safeTocH = Number.isFinite(tocPageH) && tocPageH > 0 ? tocPageH : 297;
       pdf.addImage(tocImgData, "JPEG", 0, 0, pageWidth, safeTocH);
 
+      // 後續每一頁：獨立渲染單筆紀錄的 HTML
       for (let i = 0; i < clubRecords.length; i++) {
+        const r = clubRecords[i];
         pdf.addPage();
 
-        const canvas = await renderRecordToCanvas(clubRecords[i]);
+        const recordHtml = `
+          <div style="width:800px;padding:32px 40px;box-sizing:border-box;background:#ffffff;">
+            <div style="text-align:center;margin-bottom:20px;">
+              <div style="font-size:18px;font-weight:700;color:#111827;letter-spacing:0.5px;">
+                弘光科技大學社團指導老師教學紀錄表
+              </div>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px;border:1px solid #111827;">
+              <tr style="border-bottom:1px solid #111827;">
+                <td style="width:120px;padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">社團名稱</td>
+                <td style="padding:4px 6px;">${r.club_name || clubName}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #111827;">
+                <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">指導日期</td>
+                <td style="padding:4px 6px;">${r.course_date || "　"}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #111827;">
+                <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">課程主題</td>
+                <td style="padding:4px 6px;">${r.course_topic || "　"}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #111827;">
+                <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">出席人數</td>
+                <td style="padding:4px 6px;">${r.attendance_count ?? "　"}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #111827;">
+                <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">本次輔導時數</td>
+                <td style="padding:4px 6px;">${r.teaching_hours ?? 0} 小時</td>
+              </tr>
+              <tr>
+                <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">填報人姓名 / 職稱</td>
+                <td style="padding:4px 6px;">${(r.submitter_name || "　") + " / " + (r.submitter_role || "　")}</td>
+              </tr>
+            </table>
+            <div style="margin-bottom:10px;">
+              <div style="font-size:11px;font-weight:600;border-bottom:1px solid #111827;padding-bottom:3px;margin-bottom:6px;">
+                教學內容描述
+              </div>
+              <div style="min-height:120px;border:1px solid #111827;padding:6px 8px;font-size:11px;line-height:1.6;">
+                ${(r.content || "")
+                  .split("\\n")
+                  .map((line: string) => `<p>${line || "　"}</p>`)
+                  .join("")}
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;border-bottom:1px solid #111827;padding-bottom:3px;margin-bottom:6px;">
+                教學成果照片
+              </div>
+              <div style="min-height:180px;border:1px solid #111827;background:#f9fafb;display:flex;align-items:center;justify-content:center;">
+                ${
+                  r.photo_url
+                    ? `<img src="${r.photo_url}" style="max-width:480px;max-height:260px;object-fit:contain;" />`
+                    : `<span style="font-size:11px;color:#9ca3af;">（本次未上傳教學成果照片）</span>`
+                }
+              </div>
+            </div>
+          </div>
+        `;
+
+        printContainer.innerHTML = "";
+        const recordDiv = document.createElement("div");
+        recordDiv.innerHTML = recordHtml;
+        printContainer.appendChild(recordDiv);
+
+        await waitImagesLoaded(printContainer);
+
+        const canvas = await html2canvas(recordDiv, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: "#ffffff",
+          scrollX: 0,
+          scrollY: -window.scrollY,
+          windowWidth: document.documentElement.offsetWidth,
+          windowHeight: document.documentElement.offsetHeight,
+        });
+
         const imgData = canvas.toDataURL("image/jpeg", 0.9);
         const ratio = pageWidth / canvas.width;
         const pageHeight = canvas.height * ratio;
@@ -293,11 +397,11 @@ export default function AdminPage() {
 
         pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, safeHeight);
 
-        // 使用支援中文的字體來渲染頁碼，避免「第 / 頁 / 共」出現亂碼
+        // 使用支援中文的字體來渲染頁碼
         try {
           pdf.setFont("NotoSansTC" as unknown as string);
         } catch {
-          // 若該字體尚未註冊，jsPDF 會自動 fallback，仍可正常顯示數字部分
+          // 若字型尚未註冊則 fallback
         }
         pdf.setFontSize(9);
         pdf.setTextColor(160, 160, 160);
@@ -314,10 +418,13 @@ export default function AdminPage() {
       console.error("[Admin] Merge PDF error", err);
       alert("合併 PDF 產生失敗，請確認 F12 Console 訊息");
     } finally {
+      if (printContainer.parentNode) {
+        document.body.removeChild(printContainer);
+      }
       setMergingClub(null);
       setIsMergingPDF(false);
     }
-  }, [records, renderRecordToCanvas]);
+  }, [records]);
 
   const currentCategory = CLUB_CATEGORIES[activeTab];
   const clubs = currentCategory.clubs;
