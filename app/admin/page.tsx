@@ -16,6 +16,8 @@ const HOURS_THRESHOLD = 8;
 const COUNT_THRESHOLD = 4;
 const ADMIN_PASSWORD = "15001500";
 
+type SinglePdfAction = "download" | "preview";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getClubStats(records: any[], clubName: string) {
   const matched = records.filter((r) => r.club_name === clubName);
@@ -73,6 +75,7 @@ export default function AdminPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [mergingClub, setMergingClub] = useState<string | null>(null);
   const [isMergingPDF, setIsMergingPDF] = useState(false);
+  const [isPreviewingPdf, setIsPreviewingPdf] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pdfRecord, setPdfRecord] = useState<any>(null);
   const [expandedClubs, setExpandedClubs] = useState<Set<string>>(new Set());
@@ -166,26 +169,49 @@ export default function AdminPage() {
   }, []);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const downloadPDF = useCallback(async (record: any) => {
-    setDownloadingId(record.id);
-    try {
-      const canvas = await renderRecordToCanvas(record);
-      const imgData = canvas.toDataURL("image/jpeg", 0.9);
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = 210;
-      const ratio = pageWidth / canvas.width;
-      const pageHeight = canvas.height * ratio;
-      const safeHeight = Number.isFinite(pageHeight) && pageHeight > 0 ? pageHeight : 297;
+  const downloadPDF = useCallback(
+    async (record: any, action: SinglePdfAction = "download") => {
+      if (action === "preview") {
+        setIsPreviewingPdf(true);
+        await new Promise((r) => setTimeout(r, 100));
+      } else {
+        setDownloadingId(record.id);
+      }
 
-      pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, safeHeight);
-      pdf.save(`教學紀錄_${record.club_name || "社團"}_${record.course_date || "未知日期"}.pdf`);
-    } catch (err) {
-      console.error("[Admin] PDF generate error", err);
-      alert("PDF 產生失敗，請確認 F12 Console 訊息");
-    } finally {
-      setDownloadingId(null);
-    }
-  }, [renderRecordToCanvas]);
+      try {
+        const canvas = await renderRecordToCanvas(record);
+        const imgData = canvas.toDataURL("image/jpeg", 0.9);
+        const pdf = new jsPDF("p", "mm", "a4");
+        const pageWidth = 210;
+        const ratio = pageWidth / canvas.width;
+        const pageHeight = canvas.height * ratio;
+        const safeHeight =
+          Number.isFinite(pageHeight) && pageHeight > 0 ? pageHeight : 297;
+
+        pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, safeHeight);
+
+        if (action === "download") {
+          pdf.save(
+            `教學紀錄_${record.club_name || "社團"}_${record.course_date || "未知日期"}.pdf`,
+          );
+        } else {
+          const blobUrlResult = pdf.output("bloburl");
+          const blobUrl =
+            typeof blobUrlResult === "string"
+              ? blobUrlResult
+              : (blobUrlResult as URL).href;
+          window.open(blobUrl, "_blank", "noopener,noreferrer");
+        }
+      } catch (err) {
+        console.error("[Admin] PDF generate error", err);
+        alert("PDF 產生失敗，請確認 F12 Console 訊息");
+      } finally {
+        setDownloadingId(null);
+        setIsPreviewingPdf(false);
+      }
+    },
+    [renderRecordToCanvas],
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const downloadClubAllPDFs = useCallback(async (clubName: string, clubRecords: any[]) => {
@@ -499,7 +525,7 @@ export default function AdminPage() {
 
   return (
     <div className="relative min-h-screen bg-gray-50 px-4 py-6 font-sans text-gray-900 sm:px-8">
-      {isMergingPDF && (
+      {(isMergingPDF || isPreviewingPdf) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-sm rounded-2xl bg-white px-6 py-6 text-center shadow-xl">
             <div className="mb-3 flex justify-center">
@@ -508,10 +534,14 @@ export default function AdminPage() {
               </div>
             </div>
             <p className="mb-1 text-sm font-semibold text-gray-900">
-              📄 正在為您彙整全學期紀錄...
+              {isPreviewingPdf
+                ? "👁️ 正在產生 PDF 預覽..."
+                : "📄 正在為您彙整全學期紀錄..."}
             </p>
             <p className="text-xs text-gray-500">
-              系統正在生成高畫質 PDF，請勿關閉網頁。
+              {isPreviewingPdf
+                ? "系統正在生成高畫質 PDF，預覽將在新分頁開啟，請勿關閉本頁。"
+                : "系統正在生成高畫質 PDF，請勿關閉網頁。"}
             </p>
           </div>
         </div>
@@ -530,7 +560,7 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={exportExcel}
-            disabled={isMergingPDF}
+            disabled={isMergingPDF || isPreviewingPdf}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             📊 匯出 114-2 核銷總表
@@ -657,7 +687,9 @@ export default function AdminPage() {
                         <td colSpan={4} className="px-4 py-2">
                           <button
                             type="button"
-                            disabled={isMergingPDF || mergingClub === clubName}
+                            disabled={
+                              isMergingPDF || isPreviewingPdf || mergingClub === clubName
+                            }
                             onClick={(e) => {
                               e.stopPropagation();
                               downloadClubAllPDFs(clubName, clubRecords);
@@ -681,6 +713,7 @@ export default function AdminPage() {
                     {isExpanded &&
                       clubRecords.map((record) => {
                         const isLoading = downloadingId === record.id;
+                        const pdfBusy = isMergingPDF || isPreviewingPdf;
                         return (
                           <tr
                             key={record.id}
@@ -697,24 +730,37 @@ export default function AdminPage() {
                               {record.teaching_hours ?? 0}h
                             </td>
                             <td className="px-4 py-2">
-                              <button
-                                type="button"
-                                disabled={isMergingPDF || isLoading}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  downloadPDF(record);
-                                }}
-                                className="inline-flex items-center gap-1 rounded-full border border-sky-500 bg-white px-3 py-1 text-xs font-medium text-sky-600 shadow-sm transition hover:bg-sky-500 hover:text-white disabled:cursor-wait disabled:opacity-60"
-                              >
-                                {isLoading ? (
-                                  <>
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                    產生中…
-                                  </>
-                                ) : (
-                                  "📥 下載 PDF"
-                                )}
-                              </button>
+                              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  disabled={pdfBusy || isLoading}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void downloadPDF(record, "preview");
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 disabled:cursor-wait disabled:opacity-60"
+                                >
+                                  👁️ 預覽
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={pdfBusy || isLoading}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void downloadPDF(record, "download");
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-full border border-sky-500 bg-white px-3 py-1 text-xs font-medium text-sky-600 shadow-sm transition hover:bg-sky-500 hover:text-white disabled:cursor-wait disabled:opacity-60"
+                                >
+                                  {isLoading ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      產生中…
+                                    </>
+                                  ) : (
+                                    "📥 下載 PDF"
+                                  )}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
