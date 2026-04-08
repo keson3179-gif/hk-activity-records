@@ -67,6 +67,115 @@ async function waitImagesLoaded(root: HTMLElement): Promise<void> {
   );
 }
 
+const OFFSCREEN_PRINT_CONTAINER_CSS =
+  "position:fixed;top:0;left:-9999px;width:800px;z-index:-9999;opacity:0;pointer-events:none;overflow:hidden;background:#ffffff;font-family:system-ui,-apple-system,sans-serif;color:#111827;font-size:12px;line-height:1.6;box-sizing:border-box;";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildSingleRecordPdfHtml(r: any, clubFallback?: string): string {
+  const club = r.club_name || clubFallback || "社團";
+  const contentHtml = String(r.content || "")
+    .split(/\r?\n/)
+    .map((line) => `<p>${line || "　"}</p>`)
+    .join("");
+
+  return `
+    <div style="width:800px;padding:32px 40px;box-sizing:border-box;background:#ffffff;">
+      <div style="text-align:center;margin-bottom:20px;">
+        <div style="font-size:18px;font-weight:700;color:#111827;letter-spacing:0.5px;">
+          弘光科技大學社團指導老師教學紀錄表
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px;border:1px solid #111827;">
+        <tr style="border-bottom:1px solid #111827;">
+          <td style="width:120px;padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">社團名稱</td>
+          <td style="padding:4px 6px;">${club}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #111827;">
+          <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">指導日期</td>
+          <td style="padding:4px 6px;">${r.course_date || "　"}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #111827;">
+          <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">課程主題</td>
+          <td style="padding:4px 6px;">${r.course_topic || "　"}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #111827;">
+          <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">出席人數</td>
+          <td style="padding:4px 6px;">${r.attendance_count ?? "　"}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #111827;">
+          <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">本次輔導時數</td>
+          <td style="padding:4px 6px;">${r.teaching_hours ?? 0} 小時</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">填報人姓名 / 職稱</td>
+          <td style="padding:4px 6px;">${(r.submitter_name || "　") + " / " + (r.submitter_role || "　")}</td>
+        </tr>
+      </table>
+      <div style="margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:600;border-bottom:1px solid #111827;padding-bottom:3px;margin-bottom:6px;">
+          教學內容描述
+        </div>
+        <div style="min-height:120px;border:1px solid #111827;padding:6px 8px;font-size:11px;line-height:1.6;">
+          ${contentHtml}
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;border-bottom:1px solid #111827;padding-bottom:3px;margin-bottom:6px;">
+          教學成果照片
+        </div>
+        <div style="min-height:180px;border:1px solid #111827;background:#f9fafb;display:flex;align-items:center;justify-content:center;">
+          ${
+            r.photo_url
+              ? `<img src="${r.photo_url}" style="max-width:480px;max-height:260px;object-fit:contain;" />`
+              : `<span style="font-size:11px;color:#9ca3af;">（本次未上傳教學成果照片）</span>`
+          }
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function captureSingleRecordToCanvas(record: any, clubFallback?: string): Promise<HTMLCanvasElement> {
+  const printContainer = document.createElement("div");
+  printContainer.style.cssText = OFFSCREEN_PRINT_CONTAINER_CSS;
+  document.body.appendChild(printContainer);
+
+  try {
+    const recordDiv = document.createElement("div");
+    recordDiv.innerHTML = buildSingleRecordPdfHtml(record, clubFallback);
+    printContainer.appendChild(recordDiv);
+
+    if (record.photo_url) {
+      const imgEl = recordDiv.querySelector<HTMLImageElement>("img");
+      if (imgEl) {
+        try {
+          imgEl.src = await toBase64(record.photo_url);
+        } catch {
+          imgEl.removeAttribute("src");
+        }
+      }
+    }
+
+    await waitImagesLoaded(printContainer);
+
+    return await html2canvas(recordDiv, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: "#ffffff",
+      scrollX: 0,
+      scrollY: -window.scrollY,
+      windowWidth: document.documentElement.offsetWidth,
+      windowHeight: document.documentElement.offsetHeight,
+    });
+  } finally {
+    if (printContainer.parentNode) {
+      document.body.removeChild(printContainer);
+    }
+  }
+}
+
 export default function AdminPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [records, setRecords] = useState<any[]>([]);
@@ -76,8 +185,6 @@ export default function AdminPage() {
   const [mergingClub, setMergingClub] = useState<string | null>(null);
   const [isMergingPDF, setIsMergingPDF] = useState(false);
   const [isPreviewingPdf, setIsPreviewingPdf] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [pdfRecord, setPdfRecord] = useState<any>(null);
   const [expandedClubs, setExpandedClubs] = useState<Set<string>>(new Set());
 
   const authAttempted = useRef(false);
@@ -118,57 +225,6 @@ export default function AdminPage() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const renderRecordToCanvas = useCallback(async (record: any) => {
-    setPdfRecord(record);
-    await new Promise((r) => setTimeout(r, 120));
-
-    const element = document.getElementById("admin-pdf-template");
-    if (!element) throw new Error("找不到 PDF 模板");
-
-    if (record.photo_url) {
-      const imgEl = element.querySelector<HTMLImageElement>("[data-pdf-photo]");
-      if (imgEl) {
-        try {
-          imgEl.src = await toBase64(record.photo_url);
-        } catch {
-          imgEl.src = "";
-        }
-      }
-    }
-
-    const styleSheets = Array.from(document.styleSheets || []);
-    const disabledSheets: CSSStyleSheet[] = [];
-    for (const sheet of styleSheets) {
-      try {
-        const css = sheet as CSSStyleSheet;
-        for (let i = 0; i < css.cssRules.length; i++) {
-          if (css.cssRules[i].cssText.includes("lab(")) {
-            css.disabled = true;
-            disabledSheets.push(css);
-            break;
-          }
-        }
-      } catch {
-        /* cross-origin */
-      }
-    }
-
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: "#ffffff",
-      scrollX: 0,
-      scrollY: -window.scrollY,
-      windowWidth: document.documentElement.offsetWidth,
-      windowHeight: document.documentElement.offsetHeight,
-    });
-    disabledSheets.forEach((s) => { s.disabled = false; });
-
-    return canvas;
-  }, []);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const downloadPDF = useCallback(
     async (record: any, action: SinglePdfAction = "download") => {
       if (action === "preview") {
@@ -179,7 +235,7 @@ export default function AdminPage() {
       }
 
       try {
-        const canvas = await renderRecordToCanvas(record);
+        const canvas = await captureSingleRecordToCanvas(record);
         const imgData = canvas.toDataURL("image/jpeg", 0.9);
         const pdf = new jsPDF("p", "mm", "a4");
         const pageWidth = 210;
@@ -210,7 +266,7 @@ export default function AdminPage() {
         setIsPreviewingPdf(false);
       }
     },
-    [renderRecordToCanvas],
+    [],
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -223,8 +279,7 @@ export default function AdminPage() {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     const printContainer = document.createElement("div");
-    printContainer.style.cssText =
-      "position:fixed;top:0;left:-9999px;width:800px;z-index:-9999;opacity:0;pointer-events:none;overflow:hidden;background:#ffffff;font-family:system-ui,-apple-system,sans-serif;color:#111827;font-size:12px;line-height:1.6;box-sizing:border-box;";
+    printContainer.style.cssText = OFFSCREEN_PRINT_CONTAINER_CSS;
     document.body.appendChild(printContainer);
 
     try {
@@ -339,82 +394,7 @@ export default function AdminPage() {
         const r = clubRecords[i];
         pdf.addPage();
 
-        const recordHtml = `
-          <div style="width:800px;padding:32px 40px;box-sizing:border-box;background:#ffffff;">
-            <div style="text-align:center;margin-bottom:20px;">
-              <div style="font-size:18px;font-weight:700;color:#111827;letter-spacing:0.5px;">
-                弘光科技大學社團指導老師教學紀錄表
-              </div>
-            </div>
-            <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px;border:1px solid #111827;">
-              <tr style="border-bottom:1px solid #111827;">
-                <td style="width:120px;padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">社團名稱</td>
-                <td style="padding:4px 6px;">${r.club_name || clubName}</td>
-              </tr>
-              <tr style="border-bottom:1px solid #111827;">
-                <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">指導日期</td>
-                <td style="padding:4px 6px;">${r.course_date || "　"}</td>
-              </tr>
-              <tr style="border-bottom:1px solid #111827;">
-                <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">課程主題</td>
-                <td style="padding:4px 6px;">${r.course_topic || "　"}</td>
-              </tr>
-              <tr style="border-bottom:1px solid #111827;">
-                <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">出席人數</td>
-                <td style="padding:4px 6px;">${r.attendance_count ?? "　"}</td>
-              </tr>
-              <tr style="border-bottom:1px solid #111827;">
-                <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">本次輔導時數</td>
-                <td style="padding:4px 6px;">${r.teaching_hours ?? 0} 小時</td>
-              </tr>
-              <tr>
-                <td style="padding:4px 6px;background:#f3f4f6;border-right:1px solid #111827;font-weight:600;">填報人姓名 / 職稱</td>
-                <td style="padding:4px 6px;">${(r.submitter_name || "　") + " / " + (r.submitter_role || "　")}</td>
-              </tr>
-            </table>
-            <div style="margin-bottom:10px;">
-              <div style="font-size:11px;font-weight:600;border-bottom:1px solid #111827;padding-bottom:3px;margin-bottom:6px;">
-                教學內容描述
-              </div>
-              <div style="min-height:120px;border:1px solid #111827;padding:6px 8px;font-size:11px;line-height:1.6;">
-                ${(r.content || "")
-                  .split("\\n")
-                  .map((line: string) => `<p>${line || "　"}</p>`)
-                  .join("")}
-              </div>
-            </div>
-            <div>
-              <div style="font-size:11px;font-weight:600;border-bottom:1px solid #111827;padding-bottom:3px;margin-bottom:6px;">
-                教學成果照片
-              </div>
-              <div style="min-height:180px;border:1px solid #111827;background:#f9fafb;display:flex;align-items:center;justify-content:center;">
-                ${
-                  r.photo_url
-                    ? `<img src="${r.photo_url}" style="max-width:480px;max-height:260px;object-fit:contain;" />`
-                    : `<span style="font-size:11px;color:#9ca3af;">（本次未上傳教學成果照片）</span>`
-                }
-              </div>
-            </div>
-          </div>
-        `;
-
-        printContainer.innerHTML = "";
-        const recordDiv = document.createElement("div");
-        recordDiv.innerHTML = recordHtml;
-        printContainer.appendChild(recordDiv);
-
-        await waitImagesLoaded(printContainer);
-
-        const canvas = await html2canvas(recordDiv, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: "#ffffff",
-          scrollX: 0,
-          scrollY: -window.scrollY,
-          windowWidth: document.documentElement.offsetWidth,
-          windowHeight: document.documentElement.offsetHeight,
-        });
+        const canvas = await captureSingleRecordToCanvas(r, clubName);
 
         const imgData = canvas.toDataURL("image/jpeg", 0.9);
         const ratio = pageWidth / canvas.width;
@@ -780,100 +760,6 @@ export default function AdminPage() {
         </a>
       </div>
 
-      {/* ── 隱藏 PDF 模板（html2canvas 擷取用） ── */}
-      <div
-        id="admin-pdf-template"
-        className="pointer-events-none fixed left-[-200vw] top-0 z-[-50] m-0 box-border w-screen overflow-hidden bg-[#ffffff] p-0 text-[12px] leading-relaxed text-[#111827]"
-      >
-        <div className="mb-4 text-center">
-          <h1 className="text-xl font-bold tracking-wide text-[#111827]">
-            弘光科技大學社團指導老師教學紀錄表
-          </h1>
-        </div>
-
-        <div className="mb-4 border border-[#111827] text-[11px]">
-          <div className="grid grid-cols-4 border-b border-[#111827]">
-            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-              社團名稱
-            </div>
-            <div className="col-span-3 px-2 py-1">
-              {pdfRecord?.club_name || "　"}
-            </div>
-          </div>
-          <div className="grid grid-cols-4 border-b border-[#111827]">
-            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-              指導日期
-            </div>
-            <div className="col-span-3 px-2 py-1">
-              {pdfRecord?.course_date || "　"}
-            </div>
-          </div>
-          <div className="grid grid-cols-4 border-b border-[#111827]">
-            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-              課程主題
-            </div>
-            <div className="col-span-3 px-2 py-1">
-              {pdfRecord?.course_topic || "　"}
-            </div>
-          </div>
-          <div className="grid grid-cols-4 border-b border-[#111827]">
-            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-              出席人數
-            </div>
-            <div className="col-span-3 px-2 py-1">
-              {pdfRecord?.attendance_count ?? "　"}
-            </div>
-          </div>
-          <div className="grid grid-cols-4 border-b border-[#111827]">
-            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-              本次輔導時數
-            </div>
-            <div className="col-span-3 px-2 py-1">
-              {(pdfRecord?.teaching_hours ?? 0) + " 小時"}
-            </div>
-          </div>
-          <div className="grid grid-cols-4">
-            <div className="col-span-1 border-r border-[#111827] bg-[#f3f4f6] px-2 py-1 font-semibold">
-              填報人姓名 / 職稱
-            </div>
-            <div className="col-span-3 px-2 py-1">
-              {(pdfRecord?.submitter_name || "　") + " / " + (pdfRecord?.submitter_role || "　")}
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <div className="mb-1 border-b border-[#111827] pb-1 text-[11px] font-semibold">
-            教學內容描述
-          </div>
-          <div className="min-h-[240px] border border-[#111827] px-3 py-2 text-[11px] leading-relaxed">
-            {(pdfRecord?.content || "").split("\n").map((line: string, idx: number) => (
-              <p key={idx}>{line || "　"}</p>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="mb-1 border-b border-[#111827] pb-1 text-[11px] font-semibold">
-            教學成果照片
-          </div>
-          <div className="flex min-h-[300px] items-center justify-center border border-[#111827] bg-[#f9fafb]">
-            {pdfRecord?.photo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                data-pdf-photo
-                src={pdfRecord.photo_url}
-                alt="教學成果照片"
-                className="max-h-[380px] max-w-[600px] object-contain"
-              />
-            ) : (
-              <span className="text-[11px] text-[#9ca3af]">
-                （本次未上傳教學成果照片）
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
