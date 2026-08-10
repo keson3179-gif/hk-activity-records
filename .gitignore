@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files（保留 .env.example 可進版控）
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +40,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 校務研究資料（本機獨立，禁止進入 GitHub）
+/docs/
+/scripts/
+
+# Supabase 舊匯出／本機資料檔（勿進 GitHub）
+/teaching_records_rows.sql
+*.sql
+scripts/teaching_records_import.json

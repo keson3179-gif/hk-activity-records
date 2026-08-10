@@ -1,0 +1,79 @@
+{
+  "name": "teaching_record",
+  "type": "base",
+  "system": false,
+  "listRule": "",
+  "viewRule": "",
+  "createRule": "",
+  "updateRule": null,
+  "deleteRule": null,
+  "fields": [
+    {
+      "name": "club_name",
+      "type": "text",
+      "required": true,
+      "max": 200
+    },
+    {
+      "name": "course_date",
+      "type": "date",
+      "required": true
+    },
+    {
+      "name": "course_topic",
+      "type": "text",
+      "required": true,
+      "max": 500
+    },
+    {
+      "name": "content",
+      "type": "text",
+      "required": true,
+      "max": 20000
+    },
+    {
+      "name": "attendance_count",
+      "type": "number",
+      "required": false,
+      "onlyInt": true,
+      "min": 0
+    },
+    {
+      "name": "teaching_hours",
+      "type": "number",
+      "required": true,
+      "min": 0
+    },
+    {
+      "name": "submitter_name",
+      "type": "text",
+      "required": true,
+      "max": 100
+    },
+    {
+      "name": "submitter_role",
+      "type": "text",
+      "required": false,
+      "max": 100
+    },
+    {
+      "name": "integrity_check",
+      "type": "bool",
+      "required": false
+    },
+    {
+      "name": "photo_url",
+      "type": "text",
+      "required": false,
+      "max": 2000
+    },
+    {
+      "name": "photo",
+      "type": "file",
+      "required": false,
+      "maxSelect": 1,
+      "maxSize": 5242880,
+      "mimeTypes": ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    }
+  ]
+}

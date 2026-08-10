@@ -5,7 +5,12 @@ import { ChevronRight, Loader2 } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
-import { supabase } from "@/lib/supabase";
+import {
+  pb,
+  normalizeTeachingRecord,
+  TEACHING_RECORD_COLLECTION,
+  type TeachingRecord,
+} from "@/lib/pocketbase";
 import {
   CLUB_CATEGORIES,
   CATEGORY_KEYS,
@@ -212,15 +217,13 @@ export default function AdminPage() {
   }, []);
 
   async function fetchRecords() {
-    const { data, error } = await supabase
-      .from("teaching_records")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
+    try {
+      const data = await pb.collection(TEACHING_RECORD_COLLECTION).getFullList<TeachingRecord>({
+        sort: "-created",
+      });
+      setRecords(data.map(normalizeTeachingRecord));
+    } catch (error) {
       console.error("抓取失敗:", error);
-    } else {
-      setRecords(data || []);
     }
   }
 

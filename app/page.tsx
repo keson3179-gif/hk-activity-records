@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, UploadCloud } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { pb, TEACHING_RECORD_COLLECTION } from "@/lib/pocketbase";
 import { CLUB_CATEGORIES, CATEGORY_KEYS, type CategoryKey } from "@/lib/constants";
 
 type FormData = {
@@ -35,7 +35,8 @@ export default function Home() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const [photoInputKey, setPhotoInputKey] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey | "">("");
   const [selectedClub, setSelectedClub] = useState("");
@@ -70,16 +71,22 @@ export default function Home() {
     setForm((prev) => ({ ...prev, [name]: checked }));
   };
 
-  const handlePhotoChange = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const clearPhoto = () => {
+    if (photoPreviewUrl) {
+      URL.revokeObjectURL(photoPreviewUrl);
+    }
+    setPhotoFile(null);
+    setPhotoPreviewUrl(null);
+    setPhotoInputKey((prev) => prev + 1);
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
       alert("請上傳圖片檔案（jpg / png 等）。");
-      setPhotoUrl(null);
-      setPhotoInputKey((prev) => prev + 1);
+      clearPhoto();
       return;
     }
 
@@ -87,44 +94,16 @@ export default function Home() {
     setErrorMessage("");
 
     try {
-      const timestamp = Date.now();
-      const random = Math.random().toString(36).slice(2, 8);
-      const fileName = `${timestamp}_${random}.jpg`;
-
-      const { data, error } = await supabase
-        .storage
-        .from("teaching-photos")
-        .upload(fileName, file);
-
-      if (error) {
-        console.error("[TeachingRecord] Photo upload error", error);
-        alert(
-          "照片上傳失敗：" +
-            (error.message || "請稍後再試。"),
-        );
-        setPhotoUrl(null);
-        setPhotoInputKey((prev) => prev + 1);
-        return;
+      if (photoPreviewUrl) {
+        URL.revokeObjectURL(photoPreviewUrl);
       }
-
-      const { data: publicData } = supabase
-        .storage
-        .from("teaching-photos")
-        .getPublicUrl(data.path);
-
-      setPhotoUrl(publicData.publicUrl);
-    } catch (err: unknown) {
-      console.error("[TeachingRecord] Unexpected error during photo upload", err);
-      const message =
-        typeof err === "object" && err !== null && "message" in err
-          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ((err as any).message as string) ??
-            "照片上傳時發生未知錯誤，請稍後再試。"
-          : "照片上傳時發生未知錯誤，請稍後再試。";
-
-      alert("照片上傳失敗：" + message);
-      setPhotoUrl(null);
-      setPhotoInputKey((prev) => prev + 1);
+      const preview = URL.createObjectURL(file);
+      setPhotoFile(file);
+      setPhotoPreviewUrl(preview);
+    } catch (err) {
+      console.error("[TeachingRecord] Photo preview error", err);
+      alert("照片預覽失敗，請重新選擇。");
+      clearPhoto();
     } finally {
       setUploadingPhoto(false);
     }
@@ -135,8 +114,7 @@ export default function Home() {
     setForm(initialForm);
     setSelectedCategory("");
     setSelectedClub("");
-    setPhotoUrl(null);
-    setPhotoInputKey((prev) => prev + 1);
+    clearPhoto();
     setErrorMessage("");
   };
 
@@ -176,46 +154,37 @@ export default function Home() {
         : null;
       const teaching_hours = Number(form.teachingHours) || 0;
 
+      const payload = {
+        club_name: form.clubName,
+        course_date: form.date,
+        course_topic: form.topic,
+        content: form.content,
+        attendance_count,
+        teaching_hours,
+        submitter_name: form.reporterName,
+        submitter_role: form.reporterTitle || "",
+        integrity_check: form.confirmed,
+      };
+
       console.log("準備送出的資料：", {
-        club_name: form.clubName,
-        course_date: form.date,
-        course_topic: form.topic,
-        content: form.content,
-        attendance_count,
-        teaching_hours,
-        submitter_name: form.reporterName,
-        submitter_role: form.reporterTitle,
-        integrity_check: form.confirmed,
-        photo_url: photoUrl,
+        ...payload,
+        has_photo: Boolean(photoFile),
       });
 
-      const { error } = await supabase.from("teaching_records").insert({
-        club_name: form.clubName,
-        course_date: form.date,
-        course_topic: form.topic,
-        content: form.content,
-        attendance_count,
-        teaching_hours,
-        submitter_name: form.reporterName,
-        submitter_role: form.reporterTitle,
-        integrity_check: form.confirmed,
-        photo_url: photoUrl,
-      });
-
-      if (error) {
-        console.log("完整的錯誤回傳：", error);
-        alert(
-          "詳細錯誤原因：" +
-            (error.message || "") +
-            " (代碼：" +
-            (error.code || "無") +
-            ")",
-        );
-        setErrorMessage("提交失敗，請稍後再試或聯繫系統管理員。");
-        return;
+      if (photoFile) {
+        const body = new window.FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value === null || value === undefined) return;
+          body.append(key, String(value));
+        });
+        body.append("photo", photoFile);
+        await pb.collection(TEACHING_RECORD_COLLECTION).create(body);
+      } else {
+        await pb.collection(TEACHING_RECORD_COLLECTION).create(payload);
       }
 
       setIsSubmitted(true);
+      clearPhoto();
     } catch (err: unknown) {
       console.error("[TeachingRecord] Unexpected error during submit", err);
 
@@ -227,7 +196,7 @@ export default function Home() {
           : "提交發生未知錯誤，請稍後再試。";
 
       if (typeof window !== "undefined") {
-        window.alert(message);
+        window.alert("詳細錯誤原因：" + message);
       }
 
       setErrorMessage("提交失敗，請稍後再試或聯繫系統管理員。");
@@ -441,20 +410,20 @@ export default function Home() {
               {uploadingPhoto && (
                 <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-1 text-[11px] text-indigo-700">
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  照片上傳中，請稍候…
+                  處理照片預覽中…
                 </span>
               )}
-              {photoUrl && !uploadingPhoto && (
+              {photoPreviewUrl && !uploadingPhoto && (
                 <div className="mt-3 flex w-full items-center gap-3 rounded-lg bg-white/60 p-2 text-[11px]">
                   <div className="h-10 w-10 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100">
                     <img
-                      src={photoUrl}
-                      alt="已上傳教學成果照片預覽"
+                      src={photoPreviewUrl}
+                      alt="已選取教學成果照片預覽"
                       className="h-full w-full object-cover"
                     />
                   </div>
                   <div className="flex-1 text-zinc-600">
-                    <p className="font-medium">照片已上傳完成</p>
+                    <p className="font-medium">照片已選取，送出時一併上傳</p>
                     <p className="text-[10px] text-zinc-400">
                       如需更換，請重新選擇照片。
                     </p>
@@ -521,7 +490,7 @@ export default function Home() {
             )}
             <span>
               {uploadingPhoto
-                ? "照片上傳中..."
+                ? "處理照片中..."
                 : submitting
                   ? "提交中..."
                   : "送出教學紀錄"}

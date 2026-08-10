@@ -1,8 +1,12 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 社團老師紀錄系統
+
+指導紀錄表單與後台，資料庫為自架 [PocketBase](https://db.keson.pro)（`teaching_record`）。
+
+環境變數見 [`.env.example`](./.env.example)；在 PB Admin 建立 collection 見 [`pb/README.md`](./pb/README.md)。
 
 ## Getting Started
 
-First, run the development server:
+複製 `.env.example` 為 `.env.local` 後啟動開發伺服器：
 
 ```bash
 npm run dev
