@@ -49,3 +49,5 @@ next-env.d.ts
 /teaching_records_rows.sql
 *.sql
 scripts/teaching_records_import.json
+
+.vercel
