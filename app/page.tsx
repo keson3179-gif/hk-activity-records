@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, UploadCloud } from "lucide-react";
 import { pb, TEACHING_RECORD_COLLECTION } from "@/lib/pocketbase";
+import { CURRENT_SEMESTER } from "@/lib/semester";
 import { CLUB_CATEGORIES, CATEGORY_KEYS, type CategoryKey } from "@/lib/constants";
 
 type FormData = {
@@ -164,6 +165,7 @@ export default function Home() {
         submitter_name: form.reporterName,
         submitter_role: form.reporterTitle || "",
         integrity_check: form.confirmed,
+        semester: CURRENT_SEMESTER,
       };
 
       console.log("準備送出的資料：", {

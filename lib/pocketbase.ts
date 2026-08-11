@@ -23,6 +23,8 @@ export type TeachingRecord = RecordModel & {
   integrity_check?: boolean;
   photo_url?: string;
   photo?: string;
+  /** 學期代碼，例 1151、1142 */
+  semester?: string;
   /** 相容舊欄位名稱 */
   created_at?: string;
 };

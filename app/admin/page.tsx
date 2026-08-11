@@ -16,6 +16,11 @@ import {
   CATEGORY_KEYS,
   type CategoryKey,
 } from "@/lib/constants";
+import {
+  CURRENT_SEMESTER,
+  SEMESTERS,
+  getSemesterMeta,
+} from "@/lib/semester";
 
 const HOURS_THRESHOLD = 8;
 const COUNT_THRESHOLD = 4;
@@ -184,6 +189,7 @@ async function captureSingleRecordToCanvas(record: any, clubFallback?: string): 
 export default function AdminPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [records, setRecords] = useState<any[]>([]);
+  const [selectedSemester, setSelectedSemester] = useState(CURRENT_SEMESTER);
   const [activeTab, setActiveTab] = useState<CategoryKey>(CATEGORY_KEYS[0]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -193,6 +199,7 @@ export default function AdminPage() {
   const [expandedClubs, setExpandedClubs] = useState<Set<string>>(new Set());
 
   const authAttempted = useRef(false);
+  const semesterMeta = getSemesterMeta(selectedSemester);
 
   useEffect(() => {
     document.title = "社團記錄管理後台";
@@ -206,7 +213,6 @@ export default function AdminPage() {
       const input = prompt("請輸入管理員密碼：");
       if (input === ADMIN_PASSWORD) {
         setIsAuthenticated(true);
-        fetchRecords();
       } else {
         alert("密碼錯誤，即將返回首頁");
         window.location.href = "/";
@@ -216,16 +222,31 @@ export default function AdminPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  async function fetchRecords() {
-    try {
-      const data = await pb.collection(TEACHING_RECORD_COLLECTION).getFullList<TeachingRecord>({
-        sort: "-created",
-      });
-      setRecords(data.map(normalizeTeachingRecord));
-    } catch (error) {
-      console.error("抓取失敗:", error);
-    }
-  }
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await pb
+          .collection(TEACHING_RECORD_COLLECTION)
+          .getFullList<TeachingRecord>({
+            filter: `semester = "${selectedSemester}"`,
+            sort: "-created",
+          });
+        if (!cancelled) {
+          setRecords(data.map(normalizeTeachingRecord));
+          setExpandedClubs(new Set());
+        }
+      } catch (error) {
+        console.error("抓取失敗:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, selectedSemester]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const downloadPDF = useCallback(
@@ -321,7 +342,7 @@ export default function AdminPage() {
         <div style="text-align:center;margin-bottom:32px;padding-top:24px;">
           <div style="font-size:13px;color:#6b7280;margin-bottom:6px;">弘光科技大學 課外活動指導組</div>
           <div style="font-size:22px;font-weight:700;color:#111827;letter-spacing:0.5px;">
-            114 學年度第 2 學期
+            ${semesterMeta.label}
           </div>
           <div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">
             ${clubName} — 教學紀錄彙整總表
@@ -422,7 +443,7 @@ export default function AdminPage() {
         );
       }
 
-      pdf.save(`114-2_${clubName}_教學紀錄全彙整.pdf`);
+      pdf.save(`${semesterMeta.filePrefix}_${clubName}_教學紀錄全彙整.pdf`);
     } catch (err) {
       console.error("[Admin] Merge PDF error", err);
       alert("合併 PDF 產生失敗，請確認 F12 Console 訊息");
@@ -433,7 +454,7 @@ export default function AdminPage() {
       setMergingClub(null);
       setIsMergingPDF(false);
     }
-  }, [records]);
+  }, [records, semesterMeta.filePrefix, semesterMeta.label]);
 
   const currentCategory = CLUB_CATEGORIES[activeTab];
   const clubs = currentCategory.clubs;
@@ -495,8 +516,11 @@ export default function AdminPage() {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "核銷總表");
-    XLSX.writeFile(wb, "弘光科大114-2社團指導紀錄核銷表.xlsx");
-  }, [records]);
+    XLSX.writeFile(
+      wb,
+      `弘光科大${semesterMeta.filePrefix}社團指導紀錄核銷表.xlsx`,
+    );
+  }, [records, semesterMeta.filePrefix]);
 
   if (!isAuthenticated) {
     return (
@@ -539,6 +563,20 @@ export default function AdminPage() {
             <p className="mt-1 text-sm text-gray-500">
               依社團屬性追蹤津貼核銷達標狀態（達標條件：輔導時數 ≥ {HOURS_THRESHOLD}h 或 填報次數 ≥ {COUNT_THRESHOLD} 次）
             </p>
+            <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
+              <span className="font-medium">學期</span>
+              <select
+                value={selectedSemester}
+                onChange={(e) => setSelectedSemester(e.target.value)}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              >
+                {SEMESTERS.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.label}（{s.code}）
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <button
             type="button"
@@ -546,7 +584,7 @@ export default function AdminPage() {
             disabled={isMergingPDF || isPreviewingPdf}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            📊 匯出 114-2 核銷總表
+            📊 匯出 {semesterMeta.filePrefix} 核銷總表
           </button>
         </header>
 
